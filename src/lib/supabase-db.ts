@@ -104,10 +104,10 @@ export async function getDailyPlanByDate(date: string) {
     .from('daily_plans')
     .select('*')
     .eq('plan_date', date)
-    .single();
+    .maybeSingle();
   
   if (error) throw error;
-  return data;
+  return data; // Returns null if no plan found
 }
 
 // Create functions
@@ -188,9 +188,17 @@ export async function createDailyPlan(plan: {
   statusSnapshot: Record<string, unknown> | Array<{ runId: string; status: string; statusComment: string | null }>;
   notes?: string | null;
 }) {
+  // Convert camelCase to snake_case for database
+  const dbPlan = {
+    plan_date: plan.planDate,
+    run_ids: plan.runIds,
+    status_snapshot: plan.statusSnapshot,
+    notes: plan.notes
+  };
+
   const { data, error } = await supabase
     .from('daily_plans')
-    .insert(plan)
+    .insert(dbPlan)
     .select()
     .single();
   
@@ -280,9 +288,16 @@ export async function updateDailyPlan(id: string, updates: Partial<{
   statusSnapshot: Record<string, unknown>;
   notes: string;
 }>) {
+  // Convert camelCase to snake_case for database
+  const dbUpdates: Record<string, unknown> = {};
+  if (updates.planDate !== undefined) dbUpdates.plan_date = updates.planDate;
+  if (updates.runIds !== undefined) dbUpdates.run_ids = updates.runIds;
+  if (updates.statusSnapshot !== undefined) dbUpdates.status_snapshot = updates.statusSnapshot;
+  if (updates.notes !== undefined) dbUpdates.notes = updates.notes;
+
   const { data, error } = await supabase
     .from('daily_plans')
-    .update(updates)
+    .update(dbUpdates)
     .eq('id', id)
     .select()
     .single();

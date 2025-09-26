@@ -11,6 +11,12 @@ export async function GET(
     console.log('🔄 Fetching daily plan for date:', date);
     
     const result = await getDailyPlanByDate(date);
+    
+    if (!result) {
+      console.log('ℹ️ No daily plan found for date:', date);
+      return NextResponse.json({ message: 'No daily plan found' }, { status: 404 });
+    }
+    
     console.log('✅ Daily plan fetched successfully:', result.id);
     return NextResponse.json(result);
   } catch (error: unknown) {

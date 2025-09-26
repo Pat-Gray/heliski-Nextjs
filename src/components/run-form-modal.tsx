@@ -17,7 +17,6 @@ interface RunFormModalProps {
 }
 
 export default function RunFormModal({ preselectedSubAreaId }: RunFormModalProps) {
-  const [open, setOpen] = useState(false);
   const [name, setName] = useState("");
   const [runNumber, setRunNumber] = useState("");
   const [aspect, setAspect] = useState("");
@@ -60,6 +59,7 @@ export default function RunFormModal({ preselectedSubAreaId }: RunFormModalProps
       queryClient.invalidateQueries({ queryKey: ["/api/runs"] });
       queryClient.invalidateQueries({ queryKey: ["/api/sub-areas"] });
       toast({ title: "Run created successfully" });
+      resetForm();
     },
     onError: (error: Error) => {
       toast({ 
@@ -72,8 +72,13 @@ export default function RunFormModal({ preselectedSubAreaId }: RunFormModalProps
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!name.trim() || !runNumber || !aspect || !averageAngle || !elevationMin || !elevationMax || !preselectedSubAreaId) {
+    if (!name.trim() || !runNumber || !aspect || !averageAngle || !elevationMin || !elevationMax) {
       toast({ title: "Please fill in all required fields", variant: "destructive" });
+      return;
+    }
+    
+    if (!preselectedSubAreaId) {
+      toast({ title: "Please select a sub-area first", variant: "destructive" });
       return;
     }
     
@@ -110,13 +115,8 @@ export default function RunFormModal({ preselectedSubAreaId }: RunFormModalProps
     setTempRunId(null);
   };
 
-  const handleClose = () => {
-    setOpen(false);
-    resetForm();
-  };
-
   return (
-    <Dialog open={open} onOpenChange={handleClose}>
+    <Dialog>
       <DialogTrigger asChild>
         <Button size="sm">
           <Plus className="w-4 h-4 mr-2" />
@@ -128,6 +128,22 @@ export default function RunFormModal({ preselectedSubAreaId }: RunFormModalProps
           <DialogTitle>Add New Run</DialogTitle>
         </DialogHeader>
         <form onSubmit={handleSubmit} className="space-y-6">
+          {/* Sub-area validation warning */}
+          {!preselectedSubAreaId && (
+            <div className="bg-yellow-50 border border-yellow-200 rounded-md p-4">
+              <div className="flex">
+                <div className="ml-3">
+                  <h3 className="text-sm font-medium text-yellow-800">
+                    No Sub-Area Selected
+                  </h3>
+                  <div className="mt-2 text-sm text-yellow-700">
+                    <p>Please select a sub-area first before adding a run.</p>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+          
           {/* Basic Information */}
           <div className="space-y-4">
             <h3 className="text-lg font-semibold">Basic Information</h3>
@@ -387,7 +403,6 @@ export default function RunFormModal({ preselectedSubAreaId }: RunFormModalProps
             <Button 
               type="button" 
               variant="outline" 
-              onClick={handleClose}
               disabled={createRunMutation.isPending}
             >
               Cancel
