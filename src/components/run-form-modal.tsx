@@ -299,19 +299,6 @@ export default function RunFormModal({ preselectedSubAreaId }: RunFormModalProps
 
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <label htmlFor="elevationMin" className="text-sm font-medium">
-                  Min Elevation (m) *
-                </label>
-                <Input
-                  id="elevationMin"
-                  type="number"
-                  value={elevationMin}
-                  onChange={(e) => setElevationMin(e.target.value)}
-                  placeholder="Enter min elevation"
-                  required
-                />
-              </div>
-              <div>
                 <label htmlFor="elevationMax" className="text-sm font-medium">
                   Max Elevation (m) *
                 </label>
@@ -321,6 +308,19 @@ export default function RunFormModal({ preselectedSubAreaId }: RunFormModalProps
                   value={elevationMax}
                   onChange={(e) => setElevationMax(e.target.value)}
                   placeholder="Enter max elevation"
+                  required
+                />
+              </div>
+              <div>
+                <label htmlFor="elevationMin" className="text-sm font-medium">
+                  Min Elevation (m) *
+                </label>
+                <Input
+                  id="elevationMin"
+                  type="number"
+                  value={elevationMin}
+                  onChange={(e) => setElevationMin(e.target.value)}
+                  placeholder="Enter min elevation"
                   required
                 />
               </div>

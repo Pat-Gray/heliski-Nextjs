@@ -85,10 +85,10 @@ export const insertRunSchema = createInsertSchema(runs).omit({
   runDescription: z.string().optional(),
   runNotes: z.string().optional(),
   statusComment: z.string().nullable().optional(),
-  gpxPath: z.string().optional(),
-  runPhoto: z.string().optional(),
-  avalanchePhoto: z.string().optional(),
-  additionalPhotos: z.array(z.string()).optional().default([]),
+  gpxPath: z.string().nullable().optional(),
+  runPhoto: z.string().nullable().optional(),
+  avalanchePhoto: z.string().nullable().optional(),
+  additionalPhotos: z.array(z.string()).nullable().optional().default([]),
 });
 
 // Schema for partial updates (without strict validation)
