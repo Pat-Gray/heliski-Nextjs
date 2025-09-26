@@ -30,7 +30,7 @@ export default function PrintDailyPlan({
         <div className="print-date">{currentDate}</div>
       </div>
       
-      <div className="print-summary">
+      {/* <div className="print-summary">
         <div className="print-summary-stats">
           <div className="print-stat">
             <div className="print-stat-label">Open Runs</div>
@@ -49,7 +49,7 @@ export default function PrintDailyPlan({
             <div className="print-stat-value">{filteredRuns.length}</div>
           </div>
         </div>
-      </div>
+      </div> */}
       
       <div className="print-areas">
         {areas

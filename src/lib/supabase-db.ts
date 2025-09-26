@@ -97,7 +97,16 @@ export async function getDailyPlans() {
     .order('plan_date', { ascending: false });
   
   if (error) throw error;
-  return data;
+  
+  // Convert snake_case to camelCase for frontend
+  return data.map(item => ({
+    id: item.id,
+    planDate: item.plan_date, // Convert plan_date to planDate
+    runIds: item.run_ids, // Convert run_ids to runIds
+    statusSnapshot: item.status_snapshot, // Convert status_snapshot to statusSnapshot
+    notes: item.notes,
+    createdAt: item.created_at, // Convert created_at to createdAt
+  }));
 }
 
 export async function getDailyPlanById(id: string) {
@@ -108,7 +117,18 @@ export async function getDailyPlanById(id: string) {
     .maybeSingle();
   
   if (error) throw error;
-  return data; // Returns null if no plan found
+  
+  if (!data) return null;
+  
+  // Convert snake_case to camelCase for frontend
+  return {
+    id: data.id,
+    planDate: data.plan_date, // Convert plan_date to planDate
+    runIds: data.run_ids, // Convert run_ids to runIds
+    statusSnapshot: data.status_snapshot, // Convert status_snapshot to statusSnapshot
+    notes: data.notes,
+    createdAt: data.created_at, // Convert created_at to createdAt
+  };
 }
 
 export async function getDailyPlanByDate(date: string) {
@@ -119,7 +139,18 @@ export async function getDailyPlanByDate(date: string) {
     .maybeSingle();
   
   if (error) throw error;
-  return data; // Returns null if no plan found
+  
+  if (!data) return null;
+  
+  // Convert snake_case to camelCase for frontend
+  return {
+    id: data.id,
+    planDate: data.plan_date, // Convert plan_date to planDate
+    runIds: data.run_ids, // Convert run_ids to runIds
+    statusSnapshot: data.status_snapshot, // Convert status_snapshot to statusSnapshot
+    notes: data.notes,
+    createdAt: data.created_at, // Convert created_at to createdAt
+  };
 }
 
 // Create functions

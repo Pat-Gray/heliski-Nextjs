@@ -27,14 +27,27 @@ export function PrintProvider({ children }: { children: ReactNode }) {
 
   const triggerPrint = () => {
     if (printData) {
+      console.log('🖨️ Print provider: triggering print...');
       // Small delay to ensure content is rendered
       setTimeout(() => {
-        window.print();
-        // Reset after printing
-        setTimeout(() => {
-          setPrintData(null);
-        }, 1000);
+        try {
+          window.print();
+          console.log('✅ Print dialog opened successfully');
+          // Reset after printing
+          setTimeout(() => {
+            setPrintData(null);
+          }, 1000);
+        } catch (error) {
+          console.error('❌ Print failed:', error);
+          // Try again after a short delay
+          setTimeout(() => {
+            console.log('🖨️ Retrying print...');
+            window.print();
+          }, 500);
+        }
       }, 100);
+    } else {
+      console.warn('⚠️ No print data available');
     }
   };
 

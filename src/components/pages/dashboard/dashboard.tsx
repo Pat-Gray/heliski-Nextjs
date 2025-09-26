@@ -407,21 +407,52 @@ export default function Dashboard() {
         redCount,
       });
       
-      // Trigger print with a small delay to ensure content is ready
-      setTimeout(() => {
-        console.log('🖨️ Triggering print dialog...');
-        triggerPrint();
-      }, 1000);
-    },
-    onError: (error: Error) => {
-      toast({ 
-        title: "Failed to submit daily plan", 
-        description: error.message || "An unexpected error occurred",
-        variant: "destructive" 
-      });
+      const printData = {
+        areas,
+        subAreas,
+        filteredRuns,
+        selectedAreas,
+        currentDate: currentDate || new Date().toLocaleDateString('en-US', { 
+          year: 'numeric', 
+          month: 'long', 
+          day: 'numeric' 
+        }),
+        greenCount,
+        orangeCount,
+        redCount,
+      };
+      
+      console.log('🖨️ Setting print data:', printData);
+      setPrintData(printData);
+      
+      // Multiple attempts to trigger print to ensure it works
+      const attemptPrint = (attempt = 1) => {
+        console.log(`🖨️ Print attempt ${attempt}...`);
+        try {
+          triggerPrint();
+          console.log('✅ Print triggered successfully');
+        } catch (error) {
+          console.error(`❌ Print attempt ${attempt} failed:`, error);
+          if (attempt < 3) {
+            setTimeout(() => attemptPrint(attempt + 1), 500);
+          } else {
+            console.error('❌ All print attempts failed');
+            // Fallback: try direct window.print()
+            setTimeout(() => {
+              console.log('🖨️ Fallback: trying window.print() directly...');
+              window.print();
+            }, 1000);
+          }
+        }
+      };
+      
+      // Start print attempts with increasing delays - give time for setPrintData to complete
+      setTimeout(() => attemptPrint(1), 1000);
+      setTimeout(() => attemptPrint(2), 2000);
+      setTimeout(() => attemptPrint(3), 3500);
     },
   });
-
+  
   const greenCount = filteredRuns.filter(run => run.status === "open").length;
   const orangeCount = filteredRuns.filter(run => run.status === "conditional").length;
   const redCount = filteredRuns.filter(run => run.status === "closed").length;
