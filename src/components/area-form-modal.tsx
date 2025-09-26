@@ -1,0 +1,111 @@
+"use client";
+
+import { useState } from "react";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { Plus } from "lucide-react";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useToast } from "@/hooks/use-toast";
+import { apiRequest } from "@/lib/queryClient";
+
+interface AreaFormModalProps {
+  preselectedAreaId?: string;
+}
+
+export default function AreaFormModal({ }: AreaFormModalProps) {
+  const [open, setOpen] = useState(false);
+  const [name, setName] = useState("");
+  const [description, setDescription] = useState("");
+  const { toast } = useToast();
+  const queryClient = useQueryClient();
+
+  const createAreaMutation = useMutation({
+    mutationFn: async (areaData: { name: string; description: string }) => {
+      return await apiRequest("POST", "/api/areas", areaData);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/areas"] });
+      toast({ title: "Area created successfully" });
+      setOpen(false);
+      setName("");
+      setDescription("");
+    },
+    onError: (error: Error) => {
+      toast({ 
+        title: "Failed to create area", 
+        description: error.message || "An error occurred",
+        variant: "destructive" 
+      });
+    },
+  });
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!name.trim()) return;
+    
+    createAreaMutation.mutate({
+      name: name.trim(),
+      description: description.trim(),
+    });
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={setOpen}>
+      <DialogTrigger asChild>
+        <Button size="sm">
+          <Plus className="w-4 h-4 mr-2" />
+          Add Area
+        </Button>
+      </DialogTrigger>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>Add New Area</DialogTitle>
+        </DialogHeader>
+        <form onSubmit={handleSubmit} className="space-y-4">
+          <div>
+            <label htmlFor="name" className="text-sm font-medium">
+              Area Name
+            </label>
+            <Input
+              id="name"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              placeholder="Enter area name"
+              required
+            />
+          </div>
+          <div>
+            <label htmlFor="description" className="text-sm font-medium">
+              Description
+            </label>
+            <Textarea
+              id="description"
+              value={description}
+              onChange={(e) => setDescription(e.target.value)}
+              placeholder="Enter area description"
+              rows={3}
+            />
+          </div>
+          <div className="flex justify-end space-x-2">
+            <Button 
+              type="button" 
+              variant="outline" 
+              onClick={() => setOpen(false)}
+              disabled={createAreaMutation.isPending}
+            >
+              Cancel
+            </Button>
+            <Button 
+              type="submit" 
+              disabled={createAreaMutation.isPending || !name.trim()}
+            >
+              {createAreaMutation.isPending ? "Creating..." : "Create Area"}
+            </Button>
+          </div>
+        </form>
+      </DialogContent>
+    </Dialog>
+  );
+}
