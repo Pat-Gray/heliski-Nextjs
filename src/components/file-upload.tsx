@@ -127,6 +127,7 @@ export default function FileUpload({
       case 'additionalPhotos': return 'Upload Additional Photo';
       default: return 'Upload File';
     }
+    
   };
 
   return (

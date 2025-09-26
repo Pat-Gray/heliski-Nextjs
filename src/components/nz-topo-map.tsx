@@ -83,7 +83,7 @@ export default function NZTopoMap({
   const [viewState, setViewState] = useState({
     longitude: 174.0,
     latitude: -41.0,
-    zoom: 6,
+    zoom: 8,
     bearing: 0,
     pitch: 0
   });
@@ -188,7 +188,7 @@ export default function NZTopoMap({
               ...prev,
               longitude: (bounds.minLon + bounds.maxLon) / 2,
               latitude: (bounds.minLat + bounds.maxLat) / 2,
-              zoom: 10
+              zoom: 14
             }));
             setHasZoomed(true);
           }
@@ -267,8 +267,9 @@ export default function NZTopoMap({
                 [bounds.maxLon, bounds.maxLat]
               ],
               {
-                padding: 50,
-                maxZoom: 13
+                padding: 20,
+                maxZoom: 16,
+                duration: 1000
               }
             );
           }

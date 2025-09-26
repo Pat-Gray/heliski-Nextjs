@@ -1,30 +1,20 @@
 "use client";
 
 import { useState} from "react";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import { Card, CardContent} from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { useToast } from "@/hooks/use-toast";
 import { 
   Mountain,
-  MapPin, 
-  Activity,
   Search,
   Database,
-  ChevronRight,
-  Image,
-  TrendingUp,
-  Compass,
-  X
+  ChevronRight
 } from "lucide-react";
-import { apiRequest } from "@/lib/queryClient";
 import AreaFormModal from "@/components/area-form-modal";
 import SubAreaFormModal from "@/components/subarea-form-modal";
 import RunFormModal from "@/components/run-form-modal";
-import ImageModal from "@/components/image-modal";
-import MapComponent from "@/components/map-component";
-import FileUpload from "@/components/file-upload";
+import RunDetailView from "@/components/run-detail-view";
 import type { Area, SubArea, Run } from "@/lib/schemas/schema";
 import { queryFn } from "@/lib/queryClient";
 
@@ -40,11 +30,7 @@ export default function RunDataManagement() {
     name: string;
   }>>([]);
   const [selectedRunId, setSelectedRunId] = useState<string | null>(null);
-  const [showImageModal, setShowImageModal] = useState(false);
-  const [selectedRunForImages, setSelectedRunForImages] = useState<Run | null>(null);
 
-  const { toast } = useToast();
-  const queryClient = useQueryClient();
 
   // Navigation functions
   const navigateToArea = (area: Area) => {
@@ -91,10 +77,6 @@ export default function RunDataManagement() {
 
 
 
-  const handleViewImages = (run: Run) => {
-    setSelectedRunForImages(run);
-    setShowImageModal(true);
-  };
 
   // Filter data based on search and selections
   const filteredAreas = areas.filter(area => 
@@ -116,17 +98,7 @@ export default function RunDataManagement() {
     return matchesSearch && matchesSubArea && matchesArea;
   });
 
-  // Get area name for sub-area
-  const getAreaName = (areaId: string) => {
-    return areas.find(area => area.id === areaId)?.name || "Unknown Area";
-  };
-
-  // Get sub-area name for run
-  const getSubAreaName = (subAreaId: string) => {
-    return subAreas.find(subArea => subArea.id === subAreaId)?.name || "Unknown Sub-Area";
-  };
-
-  // Status helpers
+  // Status helpers for run cards
   const getStatusColor = (status: string) => {
     switch (status) {
       case 'open': return 'bg-green-500';
@@ -331,215 +303,12 @@ export default function RunDataManagement() {
         </div>
 
         {/* Right Panel */}
-        <div className="flex-1 overflow-y-auto">
+        <div className="flex-1 overflow-hidden">
           {selectedRunId ? (
-            <div className="h-full">
-              {(() => {
-                const run = runs.find(r => r.id === selectedRunId);
-                if (!run) return <div>Run not found</div>;
-                
-                return (
-                  <div className="h-full flex flex-col">
-                    {/* Run Header */}
-                    <div className="p-6 border-b border-border bg-card">
-                      <div className="flex items-center space-x-4 mb-4">
-                        <div className={`w-4 h-4 rounded-full ${getStatusColor(run.status)}`} />
-                        <div>
-                          <h1 className="text-2xl font-bold">#{run.runNumber} {run.name}</h1>
-                          <p className="text-muted-foreground">
-                            {getSubAreaName(run.subAreaId)} • {getAreaName(subAreas.find(sa => sa.id === run.subAreaId)?.areaId || '')}
-                          </p>
-                        </div>
-                      </div>
-                      
-                      {/* Run Info Grid */}
-                      <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
-                        <div className="flex items-center space-x-3">
-                          <Compass className="w-5 h-5 text-muted-foreground" />
-                          <div>
-                            <p className="text-sm text-muted-foreground">Aspect</p>
-                            <p className="font-medium">{run.aspect || 'N/A'}</p>
-                          </div>
-                        </div>
-                        <div className="flex items-center space-x-3">
-                          <TrendingUp className="w-5 h-5 text-muted-foreground" />
-                          <div>
-                            <p className="text-sm text-muted-foreground">Angle</p>
-                            <p className="font-medium">{getAngleLabel(run.averageAngle)}</p>
-                          </div>
-                        </div>
-                        <div className="flex items-center space-x-3">
-                          <Mountain className="w-5 h-5 text-muted-foreground" />
-                          <div>
-                            <p className="text-sm text-muted-foreground">Elevation</p>
-                            <p className="font-medium">{run.elevationMax}-{run.elevationMin}m</p>
-                          </div>
-                        </div>
-                        <div className="flex items-center space-x-3">
-                          <Activity className="w-5 h-5 text-muted-foreground" />
-                          <div>
-                            <p className="text-sm text-muted-foreground">Status</p>
-                            <p className="font-medium">{getStatusLabel(run.status)}</p>
-                          </div>
-                        </div>
-                      </div>
-                      
-                      {run.statusComment && (
-                        <div className="mt-4 p-4 bg-muted rounded-lg">
-                          <p className="text-sm font-medium mb-1">Status Comment</p>
-                          <p className="text-sm">{run.statusComment}</p>
-                        </div>
-                      )}
-                    </div>
-
-                    {/* Map and Images */}
-                    <div className="flex-1 p-6">
-                      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 h-full">
-                        {/* GPX Track Map */}
-                        <div className="space-y-4">
-                          <div className="flex items-center justify-between">
-                            <div className="flex items-center space-x-2">
-                              <MapPin className="w-5 h-5" />
-                              <h3 className="text-lg font-semibold">GPX Track</h3>
-                            </div>
-                            <FileUpload
-                              runId={run.id}
-                              fileType="gpx"
-                              fieldName="gpxPath"
-                              onUploadComplete={async (url) => {
-                                try {
-                                  await apiRequest("PUT", `/api/runs/${run.id}`, { gpxPath: url });
-                                  queryClient.invalidateQueries({ queryKey: ["/api/runs"] });
-                                  toast({ title: "GPX track updated successfully" });
-                                } catch {
-                                  toast({ title: "Failed to update run", variant: "destructive" });
-                                }
-                              }}
-                              className="w-auto"
-                            />
-                          </div>
-                          <div className="h-96 border rounded-lg overflow-hidden">
-                            <MapComponent 
-                              gpxPath={run.gpxPath || undefined}
-                              runStatus={run.status as 'open' | 'conditional' | 'closed'}
-                              runName={run.name}
-                            />
-                          </div>
-                        </div>
-
-                        {/* Images */}
-                        <div className="space-y-4">
-                          <div className="flex items-center justify-between">
-                            <div className="flex items-center space-x-2">
-                              <Image className="w-5 h-5" />
-                              <h3 className="text-lg font-semibold">Images</h3>
-                              <span className="text-sm text-muted-foreground">
-                                ({[run.runPhoto, run.avalanchePhoto, ...(run.additionalPhotos || [])].filter(Boolean).length})
-                              </span>
-                            </div>
-                            <div className="flex space-x-2">
-                              <FileUpload
-                                runId={run.id}
-                                fileType="image"
-                                fieldName="runPhoto"
-                                onUploadComplete={async (url) => {
-                                  try {
-                                    await apiRequest("PUT", `/api/runs/${run.id}`, { runPhoto: url });
-                                    queryClient.invalidateQueries({ queryKey: ["/api/runs"] });
-                                    toast({ title: "Run photo updated successfully" });
-                                  } catch {
-                                    toast({ title: "Failed to update run", variant: "destructive" });
-                                  }
-                                }}
-                                className="w-auto"
-                              />
-                              <Button variant="outline" onClick={() => handleViewImages(run)}>
-                                <Image className="w-4 h-4 mr-2" />
-                                View All
-                              </Button>
-                            </div>
-                          </div>
-                          <div className="h-96 border rounded-lg overflow-hidden bg-muted/20 flex items-center justify-center">
-                            {run.runPhoto ? (
-                              <img
-                                src={run.runPhoto}
-                                alt={`Run photo for ${run.name}`}
-                                className="w-full h-full object-cover cursor-pointer hover:opacity-90 transition-opacity"
-                                onClick={() => handleViewImages(run)}
-                              />
-                            ) : (
-                              <div className="text-center">
-                                <Image className="w-12 h-12 mx-auto mb-2 text-muted-foreground" />
-                                <p className="text-muted-foreground">No images available</p>
-                              </div>
-                            )}
-                          </div>
-                        </div>
-                      </div>
-
-                      {/* Additional Photos */}
-                      <div className="mt-6 space-y-4">
-                        <div className="flex items-center justify-between">
-                          <h3 className="text-lg font-semibold">Additional Photos</h3>
-                          <FileUpload
-                            runId={run.id}
-                            fileType="image"
-                            fieldName="additionalPhotos"
-                            onUploadComplete={async (url) => {
-                              try {
-                                const updatedPhotos = [...(run.additionalPhotos || []), url];
-                                await apiRequest("PUT", `/api/runs/${run.id}`, { additionalPhotos: updatedPhotos });
-                                queryClient.invalidateQueries({ queryKey: ["/api/runs"] });
-                                toast({ title: "Additional photo added successfully" });
-                              } catch {
-                                toast({ title: "Failed to update run", variant: "destructive" });
-                              }
-                            }}
-                            className="w-auto"
-                          />
-                        </div>
-                        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                          {run.additionalPhotos?.map((photoUrl, index) => (
-                            <div key={index} className="relative group">
-                              <img
-                                src={photoUrl}
-                                alt={`Additional photo ${index + 1} for ${run.name}`}
-                                className="w-full h-24 object-cover rounded-lg cursor-pointer hover:opacity-90 transition-opacity"
-                                onClick={() => handleViewImages(run)}
-                              />
-                              <Button
-                                variant="destructive"
-                                size="sm"
-                                className="absolute top-1 right-1 opacity-0 group-hover:opacity-100 transition-opacity"
-                                onClick={async (e) => {
-                                  e.stopPropagation();
-                                  const updatedPhotos = run.additionalPhotos?.filter((_, i) => i !== index) || [];
-                                  try {
-                                    await apiRequest("PUT", `/api/runs/${run.id}`, { additionalPhotos: updatedPhotos });
-                                    queryClient.invalidateQueries({ queryKey: ["/api/runs"] });
-                                    toast({ title: "Photo removed successfully" });
-                                  } catch {
-                                    toast({ title: "Failed to remove photo", variant: "destructive" });
-                                  }
-                                }}
-                              >
-                                <X className="w-3 h-3" />
-                              </Button>
-                            </div>
-                          ))}
-                          {(!run.additionalPhotos || run.additionalPhotos.length === 0) && (
-                            <div className="col-span-full text-center py-8 text-muted-foreground">
-                              <Image className="w-8 h-8 mx-auto mb-2" />
-                              <p>No additional photos</p>
-                            </div>
-                          )}
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                );
-              })()}
-            </div>
+            <RunDetailView
+              runId={selectedRunId}
+              focusStatusComment={false}
+            />
           ) : (
             <div className="h-full flex items-center justify-center">
               <div className="text-center">
@@ -552,17 +321,6 @@ export default function RunDataManagement() {
         </div>
       </div>
 
-      {/* Image Modal */}
-      {showImageModal && selectedRunForImages && (
-        <ImageModal
-          isOpen={showImageModal}
-          run={selectedRunForImages}
-          onClose={() => {
-            setShowImageModal(false);
-            setSelectedRunForImages(null);
-          }}
-        />
-      )}
     </div>
   );
 }

@@ -159,45 +159,7 @@ export default function DailyPlans() {
         <Navigation />
         
         {/* Daily Plans List */}
-        <div className="flex-1 p-4 border-t border-border">
-          <h3 className="font-semibold text-sm text-muted-foreground mb-3">Recent Plans</h3>
-          <div className="space-y-2 max-h-64 overflow-y-auto">
-            {dailyPlans
-              .sort((a, b) => new Date(b.planDate).getTime() - new Date(a.planDate).getTime())
-              .slice(0, 10)
-              .map((plan) => {
-                const planDate = new Date(plan.planDate);
-                const isSelected = selectedDate && planDate.toDateString() === selectedDate.toDateString();
-                const counts = getStatusCounts(plan.runIds);
-                
-                return (
-                  <div
-                    key={plan.id}
-                    onClick={() => setSelectedDate(planDate)}
-                    className={`p-3 rounded-lg border cursor-pointer transition-colors ${
-                      isSelected 
-                        ? 'bg-primary/10 border-primary' 
-                        : 'hover:bg-muted/50 border-border'
-                    }`}
-                  >
-                    <div className="flex items-center justify-between mb-1">
-                      <span className="text-sm font-medium">
-                        {planDate.toLocaleDateString()}
-                      </span>
-                      <span className="text-xs text-muted-foreground">
-                        {plan.runIds?.length || 0} runs
-                      </span>
-                    </div>
-                    <div className="flex space-x-2 text-xs">
-                      <span className="text-green-600">{counts.open}O</span>
-                      <span className="text-orange-600">{counts.conditional}C</span>
-                      <span className="text-red-600">{counts.closed}X</span>
-                    </div>
-                  </div>
-                );
-              })}
-          </div>
-        </div>
+        
       </div>
 
       {/* Main Content */}

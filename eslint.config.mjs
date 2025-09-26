@@ -14,6 +14,13 @@ const eslintConfig = [
   {
     rules: {
       "@next/next/no-img-element": "warn",
+      "@typescript-eslint/no-unused-vars": ["warn", { 
+        "argsIgnorePattern": "^_",
+        "varsIgnorePattern": "^_",
+        "destructuredArrayIgnorePattern": "^_"
+      }],
+      "@typescript-eslint/no-require-imports": "off",
+      "jsx-a11y/alt-text": "warn",
     },
   },
   {
@@ -23,6 +30,8 @@ const eslintConfig = [
       "out/**",
       "build/**",
       "next-env.d.ts",
+      "test-upload-simple.js",
+      "tailwind.config.js",
     ],
   },
 ];

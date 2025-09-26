@@ -852,10 +852,6 @@ export default function Dashboard() {
             <RunDetailView 
               runId={selectedRunId} 
               focusStatusComment={focusStatusComment}
-              onBack={() => {
-                setSelectedRunId(null);
-                setFocusStatusComment(false);
-              }}
             />
           )}
         </div>
