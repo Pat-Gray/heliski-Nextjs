@@ -194,10 +194,10 @@ export async function createRun(run: {
   elevationMin: number;
   status: string;
   statusComment?: string | null;
-  gpxPath?: string;
-  runPhoto?: string;
-  avalanchePhoto?: string;
-  additionalPhotos?: string[];
+  gpxPath?: string | null;
+  runPhoto?: string | null;
+  avalanchePhoto?: string | null;
+  additionalPhotos?: string[] | null;
 }) {
   // Get the next run number for this sub-area if not provided
   let runNumber = run.runNumber;
