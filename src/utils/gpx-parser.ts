@@ -158,7 +158,7 @@ export function getTrackColor(index: number): string {
   return colors[index % colors.length];
 }
 
-export async function fetchGPXFile(url: string): Promise<string> {
+export async function fetchGPXFile(url: string): Promise<string | null> {
   try {
     console.log('Fetching GPX file from:', url);
     const response = await fetch(url);
@@ -174,7 +174,7 @@ export async function fetchGPXFile(url: string): Promise<string> {
       const errorText = await response.text().catch(() => 'Unable to read error response');
       console.warn(`Failed to fetch GPX file: ${response.status} ${response.statusText}. Response: ${errorText}`);
       // Return null instead of throwing to trigger fallback
-      return null as any;
+      return null;
     }
     
     const text = await response.text();
@@ -186,7 +186,7 @@ export async function fetchGPXFile(url: string): Promise<string> {
       error: error instanceof Error ? error.message : String(error)
     });
     // Return null instead of throwing to trigger fallback
-    return null as any;
+    return null;
   }
 }
 

@@ -14,8 +14,25 @@ interface RunDetailViewProps {
   onStatusChange?: (runId: string, newStatus: 'open' | 'conditional' | 'closed') => void;
 }
 
+interface Run {
+  id: string;
+  name: string;
+  runNumber: number;
+  status: 'open' | 'conditional' | 'closed';
+  statusComment?: string | null;
+  aspect?: string;
+  averageAngle?: string;
+  elevationMin?: number;
+  elevationMax?: number;
+  gpxPath?: string;
+  runPhoto?: string;
+  avalanchePhoto?: string;
+  additionalPhotos?: string[];
+  subAreaId?: string;
+}
+
 export default function RunDetailView({ runId, onBack, onStatusChange }: RunDetailViewProps) {
-  const [selectedRun, setSelectedRun] = useState<any>(null);
+  const [selectedRun, setSelectedRun] = useState<Run | null>(null);
 
   // Fetch all runs to find the selected one
   const { data: runs, isLoading } = useQuery({
@@ -25,7 +42,7 @@ export default function RunDetailView({ runId, onBack, onStatusChange }: RunDeta
 
   useEffect(() => {
     if (runs && runId) {
-      const run = runs.find((r: any) => r.id === runId);
+      const run = runs.find((r: Run) => r.id === runId);
       setSelectedRun(run);
     }
   }, [runs, runId]);
@@ -74,7 +91,7 @@ export default function RunDetailView({ runId, onBack, onStatusChange }: RunDeta
 
   const handleStatusChange = (runId: string, newStatus: 'open' | 'conditional' | 'closed') => {
     // Update local state immediately for seamless UI update
-    setSelectedRun((prev: any) => ({ ...prev, status: newStatus }));
+    setSelectedRun((prev: Run | null) => prev ? ({ ...prev, status: newStatus }) : null);
     onStatusChange?.(runId, newStatus);
   };
 
@@ -150,7 +167,7 @@ export default function RunDetailView({ runId, onBack, onStatusChange }: RunDeta
             <RunStatusUpdate
               runId={selectedRun.id}
               currentStatus={selectedRun.status}
-              currentComment={selectedRun.statusComment}
+              currentComment={selectedRun.statusComment || undefined}
               onStatusChange={handleStatusChange}
             />
           </CardContent>

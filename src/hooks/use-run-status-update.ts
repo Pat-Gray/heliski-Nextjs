@@ -1,10 +1,26 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { queryFn } from '@/lib/queryClient';
 
 interface UpdateRunStatusParams {
   runId: string;
   status: 'open' | 'conditional' | 'closed';
   statusComment?: string;
+}
+
+interface Run {
+  id: string;
+  name: string;
+  runNumber: number;
+  status: 'open' | 'conditional' | 'closed';
+  statusComment?: string | null;
+  aspect?: string;
+  averageAngle?: string;
+  elevationMin?: number;
+  elevationMax?: number;
+  gpxPath?: string;
+  runPhoto?: string;
+  avalanchePhoto?: string;
+  additionalPhotos?: string[];
+  subAreaId?: string;
 }
 
 export function useRunStatusUpdate() {
@@ -37,9 +53,9 @@ export function useRunStatusUpdate() {
       const previousRuns = queryClient.getQueryData(['/api/runs']);
 
       // Optimistically update the cache
-      queryClient.setQueryData(['/api/runs'], (old: any) => {
+      queryClient.setQueryData(['/api/runs'], (old: Run[] | undefined) => {
         if (!old) return old;
-        return old.map((run: any) => 
+        return old.map((run: Run) => 
           run.id === runId 
             ? { ...run, status, statusComment: statusComment || run.statusComment }
             : run

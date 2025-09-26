@@ -3,15 +3,27 @@ import { createClient } from '@supabase/supabase-js';
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 
-if (!supabaseUrl || !supabaseAnonKey) {
-  console.error('❌ Missing Supabase environment variables:', {
-    supabaseUrl: supabaseUrl ? 'Set' : 'Missing',
-    supabaseAnonKey: supabaseAnonKey ? 'Set' : 'Missing'
-  });
-  throw new Error('Missing required Supabase environment variables');
+// Create a function to validate environment variables at runtime
+function validateSupabaseConfig() {
+  if (!supabaseUrl || !supabaseAnonKey) {
+    console.error('❌ Missing Supabase environment variables:', {
+      supabaseUrl: supabaseUrl ? 'Set' : 'Missing',
+      supabaseAnonKey: supabaseAnonKey ? 'Set' : 'Missing'
+    });
+    throw new Error('Missing required Supabase environment variables');
+  }
 }
 
-export const supabase = createClient(supabaseUrl, supabaseAnonKey);
+// Only validate during runtime, not during build
+if (typeof window !== 'undefined' || process.env.NODE_ENV === 'development') {
+  validateSupabaseConfig();
+}
+
+// Create client with fallback values for build time
+export const supabase = createClient(
+  supabaseUrl || 'https://placeholder.supabase.co',
+  supabaseAnonKey || 'placeholder-key'
+);
 
 // File upload helper
 export async function uploadFile(
