@@ -3,7 +3,6 @@
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Plus } from "lucide-react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
@@ -17,12 +16,11 @@ interface SubAreaFormModalProps {
 export default function SubAreaFormModal({ preselectedAreaId }: SubAreaFormModalProps) {
   const [open, setOpen] = useState(false);
   const [name, setName] = useState("");
-  const [description, setDescription] = useState("");
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
   const createSubAreaMutation = useMutation({
-    mutationFn: async (subAreaData: { name: string; description: string; areaId: string }) => {
+    mutationFn: async (subAreaData: { name: string; areaId: string }) => {
       return await apiRequest("POST", "/api/sub-areas", subAreaData);
     },
     onSuccess: () => {
@@ -31,7 +29,6 @@ export default function SubAreaFormModal({ preselectedAreaId }: SubAreaFormModal
       toast({ title: "Sub-area created successfully" });
       setOpen(false);
       setName("");
-      setDescription("");
     },
     onError: (error: Error) => {
       toast({ 
@@ -48,7 +45,6 @@ export default function SubAreaFormModal({ preselectedAreaId }: SubAreaFormModal
     
     createSubAreaMutation.mutate({
       name: name.trim(),
-      description: description.trim(),
       areaId: preselectedAreaId,
     });
   };
@@ -76,18 +72,6 @@ export default function SubAreaFormModal({ preselectedAreaId }: SubAreaFormModal
               onChange={(e) => setName(e.target.value)}
               placeholder="Enter sub-area name"
               required
-            />
-          </div>
-          <div>
-            <label htmlFor="description" className="text-sm font-medium">
-              Description
-            </label>
-            <Textarea
-              id="description"
-              value={description}
-              onChange={(e) => setDescription(e.target.value)}
-              placeholder="Enter sub-area description"
-              rows={3}
             />
           </div>
           <div className="flex justify-end space-x-2">

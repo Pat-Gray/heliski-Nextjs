@@ -98,13 +98,11 @@ export default function RunDataManagement() {
 
   // Filter data based on search and selections
   const filteredAreas = areas.filter(area => 
-    area.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    area.description?.toLowerCase().includes(searchQuery.toLowerCase())
+    area.name.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
   const filteredSubAreas = subAreas.filter(subArea => {
-    const matchesSearch = subArea.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      subArea.description?.toLowerCase().includes(searchQuery.toLowerCase());
+    const matchesSearch = subArea.name.toLowerCase().includes(searchQuery.toLowerCase());
     const matchesArea = !selectedArea || subArea.areaId === selectedArea;
     return matchesSearch && matchesArea;
   });
@@ -241,9 +239,6 @@ export default function RunDataManagement() {
                         <div className="flex items-center justify-between">
                           <div>
                             <h4 className="font-medium">{area.name}</h4>
-                            <p className="text-sm text-muted-foreground">
-                              {area.description || "No description"}
-                            </p>
                           </div>
                           <Badge variant="secondary">
                             {subAreas.filter(sa => sa.areaId === area.id).length} sub-areas
@@ -276,9 +271,6 @@ export default function RunDataManagement() {
                         <div className="flex items-center justify-between">
                           <div>
                             <h4 className="font-medium">{subArea.name}</h4>
-                            <p className="text-sm text-muted-foreground">
-                              {subArea.description || "No description"}
-                            </p>
                           </div>
                           <Badge variant="secondary">
                             {runs.filter(r => r.subAreaId === subArea.id).length} runs

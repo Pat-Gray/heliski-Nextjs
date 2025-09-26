@@ -1,25 +1,26 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Plus, Upload, X } from "lucide-react";
-import { useMutation, useQueryClient, useQuery } from "@tanstack/react-query";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
-import { apiRequest, queryFn } from "@/lib/queryClient";
+import { apiRequest } from "@/lib/queryClient";
 import FileUpload from "@/components/file-upload";
-import type { Run } from "@/lib/schemas/schema";
 
 interface RunFormModalProps {
   preselectedSubAreaId?: string;
 }
 
 export default function RunFormModal({ preselectedSubAreaId }: RunFormModalProps) {
+  const [open, setOpen] = useState(false);
   const [name, setName] = useState("");
-  const [runNumber, setRunNumber] = useState("");
+  const [runDescription, setRunDescription] = useState("");
+  const [runNotes, setRunNotes] = useState("");
   const [aspect, setAspect] = useState("");
   const [averageAngle, setAverageAngle] = useState("");
   const [elevationMin, setElevationMin] = useState("");
@@ -27,40 +28,26 @@ export default function RunFormModal({ preselectedSubAreaId }: RunFormModalProps
   const [status, setStatus] = useState("open");
   const [statusComment, setStatusComment] = useState("");
   
-  // File states
+  // File states - these will store the uploaded file URLs
   const [gpxPath, setGpxPath] = useState("");
   const [runPhoto, setRunPhoto] = useState("");
   const [avalanchePhoto, setAvalanchePhoto] = useState("");
   const [additionalPhotos, setAdditionalPhotos] = useState<string[]>([]);
-  const [createdRunId, setCreatedRunId] = useState<string | null>(null);
+  
+  // Upload states for tracking upload progress
+  const [uploadProgress, setUploadProgress] = useState<Record<string, boolean>>({});
   
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
-  // Fetch runs to calculate next run number
-  const { data: runs = [] } = useQuery<Run[]>({
-    queryKey: ["/api/runs"],
-    queryFn: async () => {
-      const data = await queryFn("/api/runs");
-      return data as Run[];
-    },
-  });
-
-  // Calculate next run number when preselectedSubAreaId changes
-  useEffect(() => {
-    if (preselectedSubAreaId && runs.length > 0) {
-      const runsInSubArea = runs.filter(run => run.subAreaId === preselectedSubAreaId);
-      const maxRunNumber = runsInSubArea.length > 0 
-        ? Math.max(...runsInSubArea.map(run => run.runNumber))
-        : 0;
-      setRunNumber((maxRunNumber + 1).toString());
-    }
-  }, [preselectedSubAreaId, runs]);
+  // Generate a temporary ID for file uploads (we'll use a timestamp-based ID)
+  const [tempRunId] = useState(() => `temp-${Date.now()}`);
 
   const createRunMutation = useMutation({
     mutationFn: async (runData: {
       name: string;
-      runNumber: number;
+      runDescription?: string;
+      runNotes?: string;
       aspect: string;
       averageAngle: string;
       elevationMin: number;
@@ -75,12 +62,11 @@ export default function RunFormModal({ preselectedSubAreaId }: RunFormModalProps
     }) => {
       return await apiRequest("POST", "/api/runs", runData);
     },
-    onSuccess: (data: unknown) => {
-      const runId = (data as { id: string }).id;
-      setCreatedRunId(runId);
+    onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/runs"] });
       queryClient.invalidateQueries({ queryKey: ["/api/sub-areas"] });
       toast({ title: "Run created successfully" });
+      handleClose();
     },
     onError: (error: Error) => {
       toast({ 
@@ -91,32 +77,9 @@ export default function RunFormModal({ preselectedSubAreaId }: RunFormModalProps
     },
   });
 
-  // Mutation to update run with file URLs
-  const updateRunMutation = useMutation({
-    mutationFn: async (updates: {
-      gpxPath?: string;
-      runPhoto?: string;
-      avalanchePhoto?: string;
-      additionalPhotos?: string[];
-    }) => {
-      if (!createdRunId) throw new Error("No run ID available");
-      return await apiRequest("PATCH", `/api/runs/${createdRunId}`, updates);
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/runs"] });
-    },
-    onError: (error: Error) => {
-      toast({ 
-        title: "Failed to update run with files", 
-        description: error.message || "An error occurred",
-        variant: "destructive" 
-      });
-    },
-  });
-
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!name.trim() || !runNumber || !aspect || !averageAngle || !elevationMin || !elevationMax) {
+    if (!name.trim() || !aspect || !averageAngle || !elevationMin || !elevationMax) {
       toast({ title: "Please fill in all required fields", variant: "destructive" });
       return;
     }
@@ -125,10 +88,18 @@ export default function RunFormModal({ preselectedSubAreaId }: RunFormModalProps
       toast({ title: "Please select a sub-area first", variant: "destructive" });
       return;
     }
+
+    // Check if any files are still uploading
+    const stillUploading = Object.values(uploadProgress).some(uploading => uploading);
+    if (stillUploading) {
+      toast({ title: "Please wait for file uploads to complete", variant: "destructive" });
+      return;
+    }
     
     createRunMutation.mutate({
       name: name.trim(),
-      runNumber: parseInt(runNumber),
+      runDescription: runDescription.trim() || undefined,
+      runNotes: runNotes.trim() || undefined,
       aspect: aspect.toUpperCase(),
       averageAngle: averageAngle,
       elevationMin: parseInt(elevationMin),
@@ -136,24 +107,16 @@ export default function RunFormModal({ preselectedSubAreaId }: RunFormModalProps
       status: status,
       statusComment: statusComment.trim() || null,
       subAreaId: preselectedSubAreaId,
-      gpxPath: null, // Will be updated after file upload
-      runPhoto: null, // Will be updated after file upload
-      avalanchePhoto: null, // Will be updated after file upload
-      additionalPhotos: null, // Will be updated after file upload
+      gpxPath: gpxPath || null,
+      runPhoto: runPhoto || null,
+      avalanchePhoto: avalanchePhoto || null,
+      additionalPhotos: additionalPhotos.length > 0 ? additionalPhotos : null,
     });
   };
 
   // Handle file upload completion
   const handleFileUploadComplete = (fieldName: string, url: string) => {
-    if (!createdRunId) {
-      toast({ 
-        title: "Please create the run first", 
-        variant: "destructive" 
-      });
-      return;
-    }
-
-    // Update local state
+    // Update local state with the uploaded file URL
     switch (fieldName) {
       case 'gpxPath':
         setGpxPath(url);
@@ -168,19 +131,31 @@ export default function RunFormModal({ preselectedSubAreaId }: RunFormModalProps
         setAdditionalPhotos(prev => [...prev, url]);
         break;
     }
-
-    // Update database
-    const updates: Record<string, unknown> = {};
-    updates[fieldName] = fieldName === 'additionalPhotos' 
-      ? [...(fieldName === 'additionalPhotos' ? additionalPhotos : []), url]
-      : url;
     
-    updateRunMutation.mutate(updates);
+    // Mark this field as no longer uploading
+    setUploadProgress(prev => ({ ...prev, [fieldName]: false }));
+    
+    toast({ 
+      title: "File uploaded successfully", 
+      description: `${fieldName} has been uploaded and will be included when you create the run.` 
+    });
+  };
+
+
+  // Handle file upload error
+  const handleFileUploadError = (fieldName: string, error: string) => {
+    setUploadProgress(prev => ({ ...prev, [fieldName]: false }));
+    toast({ 
+      title: "Upload failed", 
+      description: `Failed to upload ${fieldName}: ${error}`,
+      variant: "destructive" 
+    });
   };
 
   const resetForm = () => {
     setName("");
-    setRunNumber("");
+    setRunDescription("");
+    setRunNotes("");
     setAspect("");
     setAverageAngle("");
     setElevationMin("");
@@ -191,22 +166,31 @@ export default function RunFormModal({ preselectedSubAreaId }: RunFormModalProps
     setRunPhoto("");
     setAvalanchePhoto("");
     setAdditionalPhotos([]);
-    setCreatedRunId(null);
-    
-    // Recalculate run number for the sub-area
-    if (preselectedSubAreaId && runs.length > 0) {
-      const runsInSubArea = runs.filter(run => run.subAreaId === preselectedSubAreaId);
-      const maxRunNumber = runsInSubArea.length > 0 
-        ? Math.max(...runsInSubArea.map(run => run.runNumber))
-        : 0;
-      setRunNumber((maxRunNumber + 1).toString());
-    }
+    setUploadProgress({});
   };
 
+  const handleClose = () => {
+    setOpen(false);
+    resetForm();
+  };
+
+  // Check if any files are currently uploading
+  const isAnyFileUploading = Object.values(uploadProgress).some(uploading => uploading);
+
   return (
-    <Dialog>
+    <Dialog open={open} onOpenChange={(isOpen) => {
+      if (!isOpen) {
+        handleClose();
+      }
+    }}>
       <DialogTrigger asChild>
-        <Button size="sm">
+        <Button 
+          size="sm"
+          onClick={(e) => {
+            e.preventDefault();
+            setOpen(true);
+          }}
+        >
           <Plus className="w-4 h-4 mr-2" />
           Add Run
         </Button>
@@ -235,32 +219,43 @@ export default function RunFormModal({ preselectedSubAreaId }: RunFormModalProps
           {/* Basic Information */}
           <div className="space-y-4">
             <h3 className="text-lg font-semibold">Basic Information</h3>
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <label htmlFor="name" className="text-sm font-medium">
-                  Run Name *
-                </label>
-                <Input
-                  id="name"
-                  value={name}
-                  onChange={(e) => setName(e.target.value)}
-                  placeholder="Enter run name"
-                  required
-                />
-              </div>
-              <div>
-                <label htmlFor="runNumber" className="text-sm font-medium">
-                  Run Number *
-                </label>
-                <Input
-                  id="runNumber"
-                  type="number"
-                  value={runNumber}
-                  onChange={(e) => setRunNumber(e.target.value)}
-                  placeholder="Enter run number"
-                  required
-                />
-              </div>
+            <div>
+              <label htmlFor="name" className="text-sm font-medium">
+                Run Name *
+              </label>
+              <Input
+                id="name"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                placeholder="Enter run name"
+                required
+              />
+            </div>
+            
+            <div>
+              <label htmlFor="runDescription" className="text-sm font-medium">
+                Run Description
+              </label>
+              <Textarea
+                id="runDescription"
+                value={runDescription}
+                onChange={(e) => setRunDescription(e.target.value)}
+                placeholder="Enter run description (optional)"
+                rows={3}
+              />
+            </div>
+            
+            <div>
+              <label htmlFor="runNotes" className="text-sm font-medium">
+                Run Notes
+              </label>
+              <Textarea
+                id="runNotes"
+                value={runNotes}
+                onChange={(e) => setRunNotes(e.target.value)}
+                placeholder="Enter run notes (optional)"
+                rows={3}
+              />
             </div>
             
             <div className="grid grid-cols-2 gap-4">
@@ -369,20 +364,20 @@ export default function RunFormModal({ preselectedSubAreaId }: RunFormModalProps
           {/* File Uploads */}
           <div className="space-y-4">
             <h3 className="text-lg font-semibold">Files & Media</h3>
+            <p className="text-sm text-muted-foreground">
+              Upload files now - they will be included when you create the run.
+            </p>
             
             {/* GPX Track */}
             <div className="space-y-2">
               <label className="text-sm font-medium">GPX Track</label>
-              {createdRunId ? (
-                <FileUpload
-                  runId={createdRunId}
-                  fileType="gpx"
-                  fieldName="gpxPath"
-                  onUploadComplete={(url) => handleFileUploadComplete("gpxPath", url)}
-                />
-              ) : (
-                <p className="text-sm text-muted-foreground">Create the run first to upload files</p>
-              )}
+              <FileUpload
+                runId={tempRunId}
+                fileType="gpx"
+                fieldName="gpxPath"
+                onUploadComplete={(url) => handleFileUploadComplete("gpxPath", url)}
+                onUploadError={(error) => handleFileUploadError("gpxPath", error)}
+              />
               {gpxPath && (
                 <div className="flex items-center space-x-2 text-sm text-green-600">
                   <Upload className="w-4 h-4" />
@@ -390,32 +385,27 @@ export default function RunFormModal({ preselectedSubAreaId }: RunFormModalProps
                   <Button
                     size="sm"
                     variant="ghost"
-                    onClick={() => {
-                      setGpxPath("");
-                      if (createdRunId) {
-                        updateRunMutation.mutate({ gpxPath: "" });
-                      }
-                    }}
+                    onClick={() => setGpxPath("")}
                   >
                     <X className="w-4 h-4" />
                   </Button>
                 </div>
+              )}
+              {uploadProgress.gpxPath && (
+                <div className="text-sm text-blue-600">Uploading GPX file...</div>
               )}
             </div>
 
             {/* Run Photo */}
             <div className="space-y-2">
               <label className="text-sm font-medium">Run Photo</label>
-              {createdRunId ? (
-                <FileUpload
-                  runId={createdRunId}
-                  fileType="image"
-                  fieldName="runPhoto"
-                  onUploadComplete={(url) => handleFileUploadComplete("runPhoto", url)}
-                />
-              ) : (
-                <p className="text-sm text-muted-foreground">Create the run first to upload files</p>
-              )}
+              <FileUpload
+                runId={tempRunId}
+                fileType="image"
+                fieldName="runPhoto"
+                onUploadComplete={(url) => handleFileUploadComplete("runPhoto", url)}
+                onUploadError={(error) => handleFileUploadError("runPhoto", error)}
+              />
               {runPhoto && (
                 <div className="flex items-center space-x-2 text-sm text-green-600">
                   <Upload className="w-4 h-4" />
@@ -423,32 +413,27 @@ export default function RunFormModal({ preselectedSubAreaId }: RunFormModalProps
                   <Button
                     size="sm"
                     variant="ghost"
-                    onClick={() => {
-                      setRunPhoto("");
-                      if (createdRunId) {
-                        updateRunMutation.mutate({ runPhoto: "" });
-                      }
-                    }}
+                    onClick={() => setRunPhoto("")}
                   >
                     <X className="w-4 h-4" />
                   </Button>
                 </div>
+              )}
+              {uploadProgress.runPhoto && (
+                <div className="text-sm text-blue-600">Uploading run photo...</div>
               )}
             </div>
 
             {/* Avalanche Photo */}
             <div className="space-y-2">
               <label className="text-sm font-medium">Avalanche Photo</label>
-              {createdRunId ? (
-                <FileUpload
-                  runId={createdRunId}
-                  fileType="image"
-                  fieldName="avalanchePhoto"
-                  onUploadComplete={(url) => handleFileUploadComplete("avalanchePhoto", url)}
-                />
-              ) : (
-                <p className="text-sm text-muted-foreground">Create the run first to upload files</p>
-              )}
+              <FileUpload
+                runId={tempRunId}
+                fileType="image"
+                fieldName="avalanchePhoto"
+                onUploadComplete={(url) => handleFileUploadComplete("avalanchePhoto", url)}
+                onUploadError={(error) => handleFileUploadError("avalanchePhoto", error)}
+              />
               {avalanchePhoto && (
                 <div className="flex items-center space-x-2 text-sm text-green-600">
                   <Upload className="w-4 h-4" />
@@ -456,32 +441,27 @@ export default function RunFormModal({ preselectedSubAreaId }: RunFormModalProps
                   <Button
                     size="sm"
                     variant="ghost"
-                    onClick={() => {
-                      setAvalanchePhoto("");
-                      if (createdRunId) {
-                        updateRunMutation.mutate({ avalanchePhoto: "" });
-                      }
-                    }}
+                    onClick={() => setAvalanchePhoto("")}
                   >
                     <X className="w-4 h-4" />
                   </Button>
                 </div>
+              )}
+              {uploadProgress.avalanchePhoto && (
+                <div className="text-sm text-blue-600">Uploading avalanche photo...</div>
               )}
             </div>
 
             {/* Additional Photos */}
             <div className="space-y-2">
               <label className="text-sm font-medium">Additional Photos</label>
-              {createdRunId ? (
-                <FileUpload
-                  runId={createdRunId}
-                  fileType="image"
-                  fieldName="additionalPhotos"
-                  onUploadComplete={(url) => handleFileUploadComplete("additionalPhotos", url)}
-                />
-              ) : (
-                <p className="text-sm text-muted-foreground">Create the run first to upload files</p>
-              )}
+              <FileUpload
+                runId={tempRunId}
+                fileType="image"
+                fieldName="additionalPhotos"
+                onUploadComplete={(url) => handleFileUploadComplete("additionalPhotos", url)}
+                onUploadError={(error) => handleFileUploadError("additionalPhotos", error)}
+              />
               {additionalPhotos.length > 0 && (
                 <div className="space-y-2">
                   {additionalPhotos.map((photo, index) => (
@@ -491,19 +471,16 @@ export default function RunFormModal({ preselectedSubAreaId }: RunFormModalProps
                       <Button
                         size="sm"
                         variant="ghost"
-                        onClick={() => {
-                          const newPhotos = additionalPhotos.filter((_, i) => i !== index);
-                          setAdditionalPhotos(newPhotos);
-                          if (createdRunId) {
-                            updateRunMutation.mutate({ additionalPhotos: newPhotos });
-                          }
-                        }}
+                        onClick={() => setAdditionalPhotos(prev => prev.filter((_, i) => i !== index))}
                       >
                         <X className="w-4 h-4" />
                       </Button>
                     </div>
                   ))}
                 </div>
+              )}
+              {uploadProgress.additionalPhotos && (
+                <div className="text-sm text-blue-600">Uploading additional photo...</div>
               )}
             </div>
           </div>
@@ -512,19 +489,26 @@ export default function RunFormModal({ preselectedSubAreaId }: RunFormModalProps
             <Button 
               type="button" 
               variant="outline" 
-              onClick={resetForm}
+              onClick={handleClose}
               disabled={createRunMutation.isPending}
             >
-              {createdRunId ? "Close" : "Cancel"}
+              Cancel
             </Button>
-            {!createdRunId && (
-              <Button 
-                type="submit" 
-                disabled={createRunMutation.isPending || !name.trim() || !runNumber || !aspect || !averageAngle || !elevationMin || !elevationMax || !preselectedSubAreaId}
-              >
-                {createRunMutation.isPending ? "Creating..." : "Create Run"}
-              </Button>
-            )}
+            <Button 
+              type="submit" 
+              disabled={
+                createRunMutation.isPending || 
+                !name.trim() || 
+                !aspect || 
+                !averageAngle || 
+                !elevationMin || 
+                !elevationMax || 
+                !preselectedSubAreaId ||
+                isAnyFileUploading
+              }
+            >
+              {createRunMutation.isPending ? "Creating..." : "Create Run"}
+            </Button>
           </div>
         </form>
       </DialogContent>

@@ -3,7 +3,6 @@
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Plus } from "lucide-react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
@@ -17,12 +16,11 @@ interface AreaFormModalProps {
 export default function AreaFormModal({ }: AreaFormModalProps) {
   const [open, setOpen] = useState(false);
   const [name, setName] = useState("");
-  const [description, setDescription] = useState("");
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
   const createAreaMutation = useMutation({
-    mutationFn: async (areaData: { name: string; description: string }) => {
+    mutationFn: async (areaData: { name: string }) => {
       return await apiRequest("POST", "/api/areas", areaData);
     },
     onSuccess: () => {
@@ -30,7 +28,6 @@ export default function AreaFormModal({ }: AreaFormModalProps) {
       toast({ title: "Area created successfully" });
       setOpen(false);
       setName("");
-      setDescription("");
     },
     onError: (error: Error) => {
       toast({ 
@@ -47,7 +44,6 @@ export default function AreaFormModal({ }: AreaFormModalProps) {
     
     createAreaMutation.mutate({
       name: name.trim(),
-      description: description.trim(),
     });
   };
 
@@ -74,18 +70,6 @@ export default function AreaFormModal({ }: AreaFormModalProps) {
               onChange={(e) => setName(e.target.value)}
               placeholder="Enter area name"
               required
-            />
-          </div>
-          <div>
-            <label htmlFor="description" className="text-sm font-medium">
-              Description
-            </label>
-            <Textarea
-              id="description"
-              value={description}
-              onChange={(e) => setDescription(e.target.value)}
-              placeholder="Enter area description"
-              rows={3}
             />
           </div>
           <div className="flex justify-end space-x-2">

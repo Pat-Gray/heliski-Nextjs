@@ -6,14 +6,12 @@ import { z } from "zod";
 export const areas = pgTable("areas", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   name: text("name").notNull(),
-  description: text("description"),
   createdAt: timestamp("created_at").defaultNow(),
 });
 
 export const subAreas = pgTable("sub_areas", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   name: text("name").notNull(),
-  description: text("description"),
   areaId: varchar("area_id").notNull().references(() => areas.id),
   createdAt: timestamp("created_at").defaultNow(),
 });
@@ -22,7 +20,9 @@ export const runs = pgTable("runs", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   name: text("name").notNull(),
   subAreaId: varchar("sub_area_id").notNull().references(() => subAreas.id),
-  runNumber: integer("run_number").notNull(), // Number within sub-area
+  runNumber: integer("run_number").notNull().default(1), // Auto-increment within sub-area
+  runDescription: text("run_description"), // Optional run description
+  runNotes: text("run_notes"), // Optional run notes
   aspect: text("aspect").notNull(), // SW, W, E, NW, etc.
   averageAngle: text("average_angle").notNull(), // ENUM for gradient
   elevationMax: integer("elevation_max").notNull(), // meters
@@ -77,11 +77,14 @@ export const insertRunSchema = createInsertSchema(runs).omit({
   id: true,
   createdAt: true,
   lastUpdated: true,
+  runNumber: true, // Remove runNumber from required fields - will be auto-calculated
 }).extend({
   status: z.enum(["open", "conditional", "closed"]),
   aspect: z.enum(["N", "NE", "E", "SE", "S", "SW", "W", "NW"]),
   averageAngle: z.enum(["gentle", "moderate", "steep", "very_steep"]),
-  statusComment: z.string().optional(),
+  runDescription: z.string().optional(),
+  runNotes: z.string().optional(),
+  statusComment: z.string().nullable().optional(),
   gpxPath: z.string().optional(),
   runPhoto: z.string().optional(),
   avalanchePhoto: z.string().optional(),
@@ -93,6 +96,8 @@ export const updateRunSchema = z.object({
   name: z.string().optional(),
   subAreaId: z.string().optional(),
   runNumber: z.number().optional(),
+  runDescription: z.string().optional(),
+  runNotes: z.string().optional(),
   aspect: z.enum(["N", "NE", "E", "SE", "S", "SW", "W", "NW"]).optional(),
   averageAngle: z.enum(["gentle", "moderate", "steep", "very_steep"]).optional(),
   elevationMax: z.number().optional(),

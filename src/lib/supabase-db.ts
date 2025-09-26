@@ -38,7 +38,6 @@ export async function getAreas() {
   return data.map(item => ({
     id: item.id,
     name: item.name,
-    description: item.description,
     createdAt: item.created_at,
   }));
 }
@@ -55,7 +54,6 @@ export async function getSubAreas() {
   return data.map(item => ({
     id: item.id,
     name: item.name,
-    description: item.description,
     areaId: item.area_id, // Convert area_id to areaId
     createdAt: item.created_at,
   }));
@@ -75,6 +73,8 @@ export async function getRuns() {
     name: item.name,
     subAreaId: item.sub_area_id, // Convert sub_area_id to subAreaId
     runNumber: item.run_number, // Convert run_number to runNumber
+    runDescription: item.run_description, // Convert run_description to runDescription
+    runNotes: item.run_notes, // Convert run_notes to runNotes
     aspect: item.aspect,
     averageAngle: item.average_angle, // Convert average_angle to averageAngle
     elevationMax: item.elevation_max, // Convert elevation_max to elevationMax
@@ -123,7 +123,7 @@ export async function getDailyPlanByDate(date: string) {
 }
 
 // Create functions
-export async function createArea(area: { name: string; description?: string | null }) {
+export async function createArea(area: { name: string }) {
   const { data, error } = await supabase
     .from('areas')
     .insert(area)
@@ -134,11 +134,10 @@ export async function createArea(area: { name: string; description?: string | nu
   return data;
 }
 
-export async function createSubArea(subArea: { name: string; description?: string | null; areaId: string }) {
+export async function createSubArea(subArea: { name: string; areaId: string }) {
   // Convert camelCase to snake_case for database
   const dbData = {
     name: subArea.name,
-    description: subArea.description,
     area_id: subArea.areaId, // Convert areaId to area_id
   };
   
@@ -155,23 +154,42 @@ export async function createSubArea(subArea: { name: string; description?: strin
 export async function createRun(run: {
   name: string;
   subAreaId: string;
-  runNumber: number;
+  runNumber?: number; // Optional - will be auto-calculated if not provided
+  runDescription?: string;
+  runNotes?: string;
   aspect: string;
   averageAngle: string;
   elevationMax: number;
   elevationMin: number;
-  status?: string;
-  statusComment?: string;
+  status: string;
+  statusComment?: string | null;
   gpxPath?: string;
   runPhoto?: string;
   avalanchePhoto?: string;
   additionalPhotos?: string[];
 }) {
+  // Get the next run number for this sub-area if not provided
+  let runNumber = run.runNumber;
+  if (!runNumber) {
+    const { data: existingRuns } = await supabase
+      .from('runs')
+      .select('run_number')
+      .eq('sub_area_id', run.subAreaId)
+      .order('run_number', { ascending: false })
+      .limit(1);
+    
+    runNumber = existingRuns && existingRuns.length > 0 
+      ? (existingRuns[0].run_number || 0) + 1 
+      : 1;
+  }
+
   // Convert camelCase to snake_case for database
   const dbData = {
     name: run.name,
     sub_area_id: run.subAreaId, // Convert subAreaId to sub_area_id
-    run_number: run.runNumber, // Convert runNumber to run_number
+    run_number: runNumber, // Convert runNumber to run_number
+    run_description: run.runDescription, // Convert runDescription to run_description
+    run_notes: run.runNotes, // Convert runNotes to run_notes
     aspect: run.aspect,
     average_angle: run.averageAngle, // Convert averageAngle to average_angle
     elevation_max: run.elevationMax, // Convert elevationMax to elevation_max
@@ -183,6 +201,8 @@ export async function createRun(run: {
     avalanche_photo: run.avalanchePhoto, // Convert avalanchePhoto to avalanche_photo
     additional_photos: run.additionalPhotos, // Convert additionalPhotos to additional_photos
   };
+
+  console.log('🔄 Creating run with data:', dbData);
   
   const { data, error } = await supabase
     .from('runs')
@@ -190,7 +210,12 @@ export async function createRun(run: {
     .select()
     .single();
   
-  if (error) throw error;
+  if (error) {
+    console.error('❌ Supabase create run error:', error);
+    throw new Error(`Database insert failed: ${error.message}`);
+  }
+  
+  console.log('✅ Run created successfully:', data);
   return data;
 }
 
@@ -247,6 +272,8 @@ export async function updateRun(id: string, updates: Partial<{
   name: string;
   subAreaId: string;
   runNumber: number;
+  runDescription: string;
+  runNotes: string;
   aspect: string;
   averageAngle: string;
   elevationMax: number;
@@ -265,6 +292,8 @@ export async function updateRun(id: string, updates: Partial<{
   if (updates.name !== undefined) dbUpdates.name = updates.name;
   if (updates.subAreaId !== undefined) dbUpdates.sub_area_id = updates.subAreaId;
   if (updates.runNumber !== undefined) dbUpdates.run_number = updates.runNumber;
+  if (updates.runDescription !== undefined) dbUpdates.run_description = updates.runDescription;
+  if (updates.runNotes !== undefined) dbUpdates.run_notes = updates.runNotes;
   if (updates.aspect !== undefined) dbUpdates.aspect = updates.aspect;
   if (updates.averageAngle !== undefined) dbUpdates.average_angle = updates.averageAngle;
   if (updates.elevationMax !== undefined) dbUpdates.elevation_max = updates.elevationMax;

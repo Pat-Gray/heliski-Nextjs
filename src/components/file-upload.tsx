@@ -154,8 +154,13 @@ export default function FileUpload({
           {getIcon()}
           <div className="text-sm text-muted-foreground">
             <Button
+              type="button"
               variant="outline"
-              onClick={() => fileInputRef.current?.click()}
+              onClick={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                fileInputRef.current?.click();
+              }}
               disabled={isUploading}
               className="mb-2"
             >
