@@ -54,7 +54,7 @@ export default function DailyPlans() {
       )
     : null;
 
-  const selectedRuns = selectedPlan 
+  const selectedRuns = selectedPlan && selectedPlan.runIds
     ? runs.filter(run => selectedPlan.runIds.includes(run.id))
     : [];
 
@@ -84,7 +84,15 @@ export default function DailyPlans() {
     return acc;
   }, {} as Record<string, { area: Area; subAreas: Record<string, { subArea: SubArea; runs: Run[] }> }>);
 
-  const getStatusCounts = (runIds: string[]) => {
+  const getStatusCounts = (runIds: string[] | undefined) => {
+    if (!runIds || !Array.isArray(runIds)) {
+      return {
+        open: 0,
+        conditional: 0,
+        closed: 0,
+      };
+    }
+    
     const planRuns = runs.filter(run => runIds.includes(run.id));
     return {
       open: planRuns.filter(run => run.status === "open").length,
@@ -177,7 +185,7 @@ export default function DailyPlans() {
                         {planDate.toLocaleDateString()}
                       </span>
                       <span className="text-xs text-muted-foreground">
-                        {plan.runIds.length} runs
+                        {plan.runIds?.length || 0} runs
                       </span>
                     </div>
                     <div className="flex space-x-2 text-xs">

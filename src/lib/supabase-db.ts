@@ -105,10 +105,10 @@ export async function getDailyPlanById(id: string) {
     .from('daily_plans')
     .select('*')
     .eq('id', id)
-    .single();
+    .maybeSingle();
   
   if (error) throw error;
-  return data;
+  return data; // Returns null if no plan found
 }
 
 export async function getDailyPlanByDate(date: string) {
