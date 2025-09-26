@@ -5,6 +5,7 @@ import { useRunsForArea } from '@/hooks/use-runs-for-area';
 import { parseGPXToGeoJSON } from '@/utils/gpx-parser';
 import { Loader2, MapPin, AlertTriangle, Plus, Minus } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import type { Run } from '@/lib/schemas/schema';
 
 interface NZTopoMapProps {
   areaId: string;
@@ -78,6 +79,7 @@ export default function NZTopoMap({
   onClose,
 }: NZTopoMapProps) {
   const mapRef = useRef<MapRef>(null);
+  const prevRunsDataRef = useRef<Run[]>([]);
   const [viewState, setViewState] = useState({
     longitude: 174.0,
     latitude: -41.0,
@@ -92,13 +94,55 @@ export default function NZTopoMap({
   const [mapError, setMapError] = useState<string | null>(null);
   const [useNZTopo, setUseNZTopo] = useState(true);
   const [, setTileLoadError] = useState<string | null>(null);
+  const [hasZoomed, setHasZoomed] = useState(false);
 
   const { data: runsData, isLoading, error: fetchError } = useRunsForArea(areaId, subAreaId);
 
-  // Process runs data and parse GPX files (only when runs change, not on status updates)
+  // Debug logging
+  useEffect(() => {
+    console.log('NZTopoMap - areaId:', areaId, 'subAreaId:', subAreaId);
+    console.log('NZTopoMap - runsData:', runsData);
+  }, [areaId, subAreaId, runsData]);
+
+  // Reset zoom flag when subAreaId changes
+  useEffect(() => {
+    setHasZoomed(false);
+  }, [subAreaId]);
+
+  // Process runs data and parse GPX files (only when runs structure changes, not status updates)
   useEffect(() => {
     if (!runsData || !Array.isArray(runsData)) return;
 
+    // Check if runs structure has actually changed (not just status updates)
+    const hasStructureChanged = 
+      prevRunsDataRef.current.length !== runsData.length ||
+      prevRunsDataRef.current.some((prevRun, index) => {
+        const currentRun = runsData[index];
+        return !currentRun || 
+               prevRun.id !== currentRun.id || 
+               prevRun.gpxPath !== currentRun.gpxPath ||
+               prevRun.name !== currentRun.name ||
+               prevRun.runNumber !== currentRun.runNumber;
+      });
+
+    if (!hasStructureChanged) {
+      // Only update statuses, don't reload the map
+      setRuns(prevRuns => 
+        prevRuns.map(prevRun => {
+          const updatedRun = runsData.find(run => run.id === prevRun.id);
+          if (updatedRun) {
+            return {
+              ...prevRun,
+              status: (updatedRun.status as 'open' | 'conditional' | 'closed') || prevRun.status
+            };
+          }
+          return prevRun;
+        })
+      );
+      return;
+    }
+
+    // Structure has changed, process runs
     const processRuns = async () => {
       setLoading(true);
       setError(null);
@@ -108,8 +152,15 @@ export default function NZTopoMap({
 
         for (const run of runsData) {
           if (run) {
-            // Always generate sample data - no more GPX fetching to prevent reloads
-            const gpxData = await parseGPXToGeoJSON('', subAreaId, run.runNumber);
+            // Fetch actual GPX data from the database path
+            console.log('Processing run:', {
+              id: run.id,
+              name: run.name,
+              runNumber: run.runNumber,
+              gpxPath: run.gpxPath,
+              subAreaId: run.subAreaId
+            });
+            const gpxData = await parseGPXToGeoJSON(run.gpxPath || '', subAreaId, run.runNumber);
             
             processedRuns.push({
               id: run.id || '',
@@ -122,19 +173,24 @@ export default function NZTopoMap({
           }
         }
 
+        console.log('Processed runs for map:', processedRuns.length, 'runs with GPX data');
+
         setRuns(processedRuns);
+        prevRunsDataRef.current = [...runsData];
         
-        // Auto-zoom to GPX bounds if we have runs with data
-        if (processedRuns.length > 0) {
+        // Auto-zoom to GPX bounds only on initial load, not on status updates
+        if (processedRuns.length > 0 && !hasZoomed) {
           const bounds = calculateGPXBounds(processedRuns);
           if (bounds) {
+            console.log('Setting up zoom for bounds:', bounds);
             // Store bounds for later use when map is ready
             setViewState(prev => ({
               ...prev,
               longitude: (bounds.minLon + bounds.maxLon) / 2,
               latitude: (bounds.minLat + bounds.maxLat) / 2,
-              zoom: 13
+              zoom: 10
             }));
+            setHasZoomed(true);
           }
         }
       } catch (err) {
@@ -146,7 +202,7 @@ export default function NZTopoMap({
     };
 
     processRuns();
-  }, [runsData, subAreaId]);
+  }, [runsData, subAreaId, hasZoomed]);
 
 
   // Filter runs with GPX data for rendering
@@ -202,6 +258,7 @@ export default function NZTopoMap({
     if (runs.length > 0) {
       const bounds = calculateGPXBounds(runs);
       if (bounds && mapRef.current) {
+        console.log('Fitting bounds on map load:', bounds);
         setTimeout(() => {
           if (mapRef.current) {
             mapRef.current.fitBounds(
@@ -211,11 +268,11 @@ export default function NZTopoMap({
               ],
               {
                 padding: 50,
-                maxZoom: 15
+                maxZoom: 13
               }
             );
           }
-        }, 500);
+        }, 1000); // Increased timeout to ensure map is fully ready
       }
     }
   }, [runs]);
@@ -236,6 +293,16 @@ export default function NZTopoMap({
 
   const handleMapError = useCallback((evt: unknown) => {
     console.error('Map error:', evt);
+    
+    // Handle specific Mapbox GL JS chunk loading errors
+    if (evt && typeof evt === 'object' && 'error' in evt) {
+      const error = (evt as { error: { message?: string } }).error;
+      if (error && error.message && error.message.includes('Failed to load chunk')) {
+        setMapError('Map failed to load due to a chunk loading error. Please refresh the page or clear your browser cache.');
+        return;
+      }
+    }
+    
     setMapError('Map failed to load. Please check your internet connection and try again.');
   }, []);
 
@@ -318,11 +385,17 @@ export default function NZTopoMap({
   if (!mapboxToken) {
     return (
       <div className="flex items-center justify-center h-full bg-muted/20">
-        <div className="flex flex-col items-center space-y-4 text-center">
+        <div className="flex flex-col items-center space-y-4 text-center p-6">
           <AlertTriangle className="h-8 w-8 text-destructive" />
           <div>
             <p className="text-sm font-medium">Mapbox access token not configured</p>
-            <p className="text-xs text-muted-foreground">Please set NEXT_PUBLIC_MAPBOX_ACCESS_TOKEN in your environment</p>
+            <p className="text-xs text-muted-foreground mb-2">
+              Please set NEXT_PUBLIC_MAPBOX_ACCESS_TOKEN in your environment
+            </p>
+            <div className="text-xs text-muted-foreground bg-muted p-2 rounded">
+              <p>Create a <code>.env.local</code> file in your project root with:</p>
+              <code>NEXT_PUBLIC_MAPBOX_ACCESS_TOKEN=your_token_here</code>
+            </div>
           </div>
           {onClose && (
             <Button variant="outline" size="sm" onClick={onClose}>

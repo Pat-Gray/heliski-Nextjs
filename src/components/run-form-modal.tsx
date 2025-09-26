@@ -1,16 +1,17 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Plus, Upload, X } from "lucide-react";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQueryClient, useQuery } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
-import { apiRequest } from "@/lib/queryClient";
+import { apiRequest, queryFn } from "@/lib/queryClient";
 import FileUpload from "@/components/file-upload";
+import type { Run } from "@/lib/schemas/schema";
 
 interface RunFormModalProps {
   preselectedSubAreaId?: string;
@@ -31,10 +32,30 @@ export default function RunFormModal({ preselectedSubAreaId }: RunFormModalProps
   const [runPhoto, setRunPhoto] = useState("");
   const [avalanchePhoto, setAvalanchePhoto] = useState("");
   const [additionalPhotos, setAdditionalPhotos] = useState<string[]>([]);
-  const [tempRunId, setTempRunId] = useState<string | null>(null);
+  const [createdRunId, setCreatedRunId] = useState<string | null>(null);
   
   const { toast } = useToast();
   const queryClient = useQueryClient();
+
+  // Fetch runs to calculate next run number
+  const { data: runs = [] } = useQuery<Run[]>({
+    queryKey: ["/api/runs"],
+    queryFn: async () => {
+      const data = await queryFn("/api/runs");
+      return data as Run[];
+    },
+  });
+
+  // Calculate next run number when preselectedSubAreaId changes
+  useEffect(() => {
+    if (preselectedSubAreaId && runs.length > 0) {
+      const runsInSubArea = runs.filter(run => run.subAreaId === preselectedSubAreaId);
+      const maxRunNumber = runsInSubArea.length > 0 
+        ? Math.max(...runsInSubArea.map(run => run.runNumber))
+        : 0;
+      setRunNumber((maxRunNumber + 1).toString());
+    }
+  }, [preselectedSubAreaId, runs]);
 
   const createRunMutation = useMutation({
     mutationFn: async (runData: {
@@ -55,15 +76,38 @@ export default function RunFormModal({ preselectedSubAreaId }: RunFormModalProps
       return await apiRequest("POST", "/api/runs", runData);
     },
     onSuccess: (data: unknown) => {
-      setTempRunId((data as { id: string }).id);
+      const runId = (data as { id: string }).id;
+      setCreatedRunId(runId);
       queryClient.invalidateQueries({ queryKey: ["/api/runs"] });
       queryClient.invalidateQueries({ queryKey: ["/api/sub-areas"] });
       toast({ title: "Run created successfully" });
-      resetForm();
     },
     onError: (error: Error) => {
       toast({ 
         title: "Failed to create run", 
+        description: error.message || "An error occurred",
+        variant: "destructive" 
+      });
+    },
+  });
+
+  // Mutation to update run with file URLs
+  const updateRunMutation = useMutation({
+    mutationFn: async (updates: {
+      gpxPath?: string;
+      runPhoto?: string;
+      avalanchePhoto?: string;
+      additionalPhotos?: string[];
+    }) => {
+      if (!createdRunId) throw new Error("No run ID available");
+      return await apiRequest("PATCH", `/api/runs/${createdRunId}`, updates);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/runs"] });
+    },
+    onError: (error: Error) => {
+      toast({ 
+        title: "Failed to update run with files", 
         description: error.message || "An error occurred",
         variant: "destructive" 
       });
@@ -92,11 +136,46 @@ export default function RunFormModal({ preselectedSubAreaId }: RunFormModalProps
       status: status,
       statusComment: statusComment.trim() || null,
       subAreaId: preselectedSubAreaId,
-      gpxPath: gpxPath || null,
-      runPhoto: runPhoto || null,
-      avalanchePhoto: avalanchePhoto || null,
-      additionalPhotos: additionalPhotos.length > 0 ? additionalPhotos : null,
+      gpxPath: null, // Will be updated after file upload
+      runPhoto: null, // Will be updated after file upload
+      avalanchePhoto: null, // Will be updated after file upload
+      additionalPhotos: null, // Will be updated after file upload
     });
+  };
+
+  // Handle file upload completion
+  const handleFileUploadComplete = (fieldName: string, url: string) => {
+    if (!createdRunId) {
+      toast({ 
+        title: "Please create the run first", 
+        variant: "destructive" 
+      });
+      return;
+    }
+
+    // Update local state
+    switch (fieldName) {
+      case 'gpxPath':
+        setGpxPath(url);
+        break;
+      case 'runPhoto':
+        setRunPhoto(url);
+        break;
+      case 'avalanchePhoto':
+        setAvalanchePhoto(url);
+        break;
+      case 'additionalPhotos':
+        setAdditionalPhotos(prev => [...prev, url]);
+        break;
+    }
+
+    // Update database
+    const updates: Record<string, unknown> = {};
+    updates[fieldName] = fieldName === 'additionalPhotos' 
+      ? [...(fieldName === 'additionalPhotos' ? additionalPhotos : []), url]
+      : url;
+    
+    updateRunMutation.mutate(updates);
   };
 
   const resetForm = () => {
@@ -112,7 +191,16 @@ export default function RunFormModal({ preselectedSubAreaId }: RunFormModalProps
     setRunPhoto("");
     setAvalanchePhoto("");
     setAdditionalPhotos([]);
-    setTempRunId(null);
+    setCreatedRunId(null);
+    
+    // Recalculate run number for the sub-area
+    if (preselectedSubAreaId && runs.length > 0) {
+      const runsInSubArea = runs.filter(run => run.subAreaId === preselectedSubAreaId);
+      const maxRunNumber = runsInSubArea.length > 0 
+        ? Math.max(...runsInSubArea.map(run => run.runNumber))
+        : 0;
+      setRunNumber((maxRunNumber + 1).toString());
+    }
   };
 
   return (
@@ -285,12 +373,12 @@ export default function RunFormModal({ preselectedSubAreaId }: RunFormModalProps
             {/* GPX Track */}
             <div className="space-y-2">
               <label className="text-sm font-medium">GPX Track</label>
-              {tempRunId ? (
+              {createdRunId ? (
                 <FileUpload
-                  runId={tempRunId}
+                  runId={createdRunId}
                   fileType="gpx"
                   fieldName="gpxPath"
-                  onUploadComplete={(url) => setGpxPath(url)}
+                  onUploadComplete={(url) => handleFileUploadComplete("gpxPath", url)}
                 />
               ) : (
                 <p className="text-sm text-muted-foreground">Create the run first to upload files</p>
@@ -302,7 +390,12 @@ export default function RunFormModal({ preselectedSubAreaId }: RunFormModalProps
                   <Button
                     size="sm"
                     variant="ghost"
-                    onClick={() => setGpxPath("")}
+                    onClick={() => {
+                      setGpxPath("");
+                      if (createdRunId) {
+                        updateRunMutation.mutate({ gpxPath: "" });
+                      }
+                    }}
                   >
                     <X className="w-4 h-4" />
                   </Button>
@@ -313,12 +406,12 @@ export default function RunFormModal({ preselectedSubAreaId }: RunFormModalProps
             {/* Run Photo */}
             <div className="space-y-2">
               <label className="text-sm font-medium">Run Photo</label>
-              {tempRunId ? (
+              {createdRunId ? (
                 <FileUpload
-                  runId={tempRunId}
+                  runId={createdRunId}
                   fileType="image"
                   fieldName="runPhoto"
-                  onUploadComplete={(url) => setRunPhoto(url)}
+                  onUploadComplete={(url) => handleFileUploadComplete("runPhoto", url)}
                 />
               ) : (
                 <p className="text-sm text-muted-foreground">Create the run first to upload files</p>
@@ -330,7 +423,12 @@ export default function RunFormModal({ preselectedSubAreaId }: RunFormModalProps
                   <Button
                     size="sm"
                     variant="ghost"
-                    onClick={() => setRunPhoto("")}
+                    onClick={() => {
+                      setRunPhoto("");
+                      if (createdRunId) {
+                        updateRunMutation.mutate({ runPhoto: "" });
+                      }
+                    }}
                   >
                     <X className="w-4 h-4" />
                   </Button>
@@ -341,12 +439,12 @@ export default function RunFormModal({ preselectedSubAreaId }: RunFormModalProps
             {/* Avalanche Photo */}
             <div className="space-y-2">
               <label className="text-sm font-medium">Avalanche Photo</label>
-              {tempRunId ? (
+              {createdRunId ? (
                 <FileUpload
-                  runId={tempRunId}
+                  runId={createdRunId}
                   fileType="image"
                   fieldName="avalanchePhoto"
-                  onUploadComplete={(url) => setAvalanchePhoto(url)}
+                  onUploadComplete={(url) => handleFileUploadComplete("avalanchePhoto", url)}
                 />
               ) : (
                 <p className="text-sm text-muted-foreground">Create the run first to upload files</p>
@@ -358,7 +456,12 @@ export default function RunFormModal({ preselectedSubAreaId }: RunFormModalProps
                   <Button
                     size="sm"
                     variant="ghost"
-                    onClick={() => setAvalanchePhoto("")}
+                    onClick={() => {
+                      setAvalanchePhoto("");
+                      if (createdRunId) {
+                        updateRunMutation.mutate({ avalanchePhoto: "" });
+                      }
+                    }}
                   >
                     <X className="w-4 h-4" />
                   </Button>
@@ -369,12 +472,12 @@ export default function RunFormModal({ preselectedSubAreaId }: RunFormModalProps
             {/* Additional Photos */}
             <div className="space-y-2">
               <label className="text-sm font-medium">Additional Photos</label>
-              {tempRunId ? (
+              {createdRunId ? (
                 <FileUpload
-                  runId={tempRunId}
+                  runId={createdRunId}
                   fileType="image"
                   fieldName="additionalPhotos"
-                  onUploadComplete={(url) => setAdditionalPhotos(prev => [...prev, url])}
+                  onUploadComplete={(url) => handleFileUploadComplete("additionalPhotos", url)}
                 />
               ) : (
                 <p className="text-sm text-muted-foreground">Create the run first to upload files</p>
@@ -388,7 +491,13 @@ export default function RunFormModal({ preselectedSubAreaId }: RunFormModalProps
                       <Button
                         size="sm"
                         variant="ghost"
-                        onClick={() => setAdditionalPhotos(prev => prev.filter((_, i) => i !== index))}
+                        onClick={() => {
+                          const newPhotos = additionalPhotos.filter((_, i) => i !== index);
+                          setAdditionalPhotos(newPhotos);
+                          if (createdRunId) {
+                            updateRunMutation.mutate({ additionalPhotos: newPhotos });
+                          }
+                        }}
                       >
                         <X className="w-4 h-4" />
                       </Button>
@@ -403,16 +512,19 @@ export default function RunFormModal({ preselectedSubAreaId }: RunFormModalProps
             <Button 
               type="button" 
               variant="outline" 
+              onClick={resetForm}
               disabled={createRunMutation.isPending}
             >
-              Cancel
+              {createdRunId ? "Close" : "Cancel"}
             </Button>
-            <Button 
-              type="submit" 
-              disabled={createRunMutation.isPending || !name.trim() || !runNumber || !aspect || !averageAngle || !elevationMin || !elevationMax || !preselectedSubAreaId}
-            >
-              {createRunMutation.isPending ? "Creating..." : "Create Run"}
-            </Button>
+            {!createdRunId && (
+              <Button 
+                type="submit" 
+                disabled={createRunMutation.isPending || !name.trim() || !runNumber || !aspect || !averageAngle || !elevationMin || !elevationMax || !preselectedSubAreaId}
+              >
+                {createRunMutation.isPending ? "Creating..." : "Create Run"}
+              </Button>
+            )}
           </div>
         </form>
       </DialogContent>

@@ -289,9 +289,24 @@ export async function parseGPXToGeoJSON(
   try {
     console.log('parseGPXToGeoJSON called with:', { gpxPath, subAreaId, runNumber });
     
-    // Always generate sample data - no more fetching to prevent errors and reloads
-    console.log('Generating sample GPX data');
-    const gpxContent = generateSampleGPX(subAreaId, runNumber);
+    let gpxContent: string;
+    
+    // Try to fetch the actual GPX file if path is provided
+    if (gpxPath && gpxPath.trim() !== '') {
+      console.log('Fetching GPX file from:', gpxPath);
+      const fetchedContent = await fetchGPXFile(gpxPath);
+      
+      if (fetchedContent) {
+        console.log('Successfully fetched GPX file, length:', fetchedContent.length);
+        gpxContent = fetchedContent;
+      } else {
+        console.log('Failed to fetch GPX file, using sample data');
+        gpxContent = generateSampleGPX(subAreaId, runNumber);
+      }
+    } else {
+      console.log('No GPX path provided, generating sample data');
+      gpxContent = generateSampleGPX(subAreaId, runNumber);
+    }
 
     console.log('Parsing GPX content...');
     const parsedGPX = parseGPX(gpxContent);

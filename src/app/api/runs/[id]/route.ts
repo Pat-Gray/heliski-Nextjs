@@ -67,19 +67,31 @@ export async function PATCH(
 ) {
   try {
     const { id } = await params;
-    console.log('🔄 Patching run status:', id);
+    console.log('🔄 Patching run:', id);
     const body = await request.json();
     console.log('📝 Request body:', body);
     
-    // For PATCH, we only update specific fields (keep camelCase for updateRun function)
-    const updateData: { status?: string; statusComment?: string | null } = {};
-    if (body.status) updateData.status = body.status;
+    // For PATCH, we can update any fields (keep camelCase for updateRun function)
+    const updateData: {
+      status?: string;
+      statusComment?: string | null;
+      gpxPath?: string;
+      runPhoto?: string;
+      avalanchePhoto?: string;
+      additionalPhotos?: string[];
+    } = {};
+    
+    if (body.status !== undefined) updateData.status = body.status;
     if (body.statusComment !== undefined) updateData.statusComment = body.statusComment;
+    if (body.gpxPath !== undefined) updateData.gpxPath = body.gpxPath;
+    if (body.runPhoto !== undefined) updateData.runPhoto = body.runPhoto;
+    if (body.avalanchePhoto !== undefined) updateData.avalanchePhoto = body.avalanchePhoto;
+    if (body.additionalPhotos !== undefined) updateData.additionalPhotos = body.additionalPhotos;
     
     console.log('✅ Update data:', updateData);
     
     const result = await updateRun(id, updateData);
-    console.log('✅ Run status updated successfully:', result.id);
+    console.log('✅ Run updated successfully:', result.id);
     return NextResponse.json(result);
   } catch (error: unknown) {
     console.error('❌ API Error:', error);
