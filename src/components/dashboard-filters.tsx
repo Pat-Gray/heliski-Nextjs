@@ -16,21 +16,21 @@ interface AvalancheRiskAssessmentProps {
       windLoading: boolean;
       temperatureRise: boolean;
       windSpeed: string;
-      visibility: string;
+      windDirection: string;
     };
   }) => void;
 }
 
 export default function AvalancheRiskAssessment({ onApplyRiskAssessment }: AvalancheRiskAssessmentProps) {
   const [isOpen, setIsOpen] = useState(false);
-  const [strategicMindset, setStrategicMindset] = useState("Conservative");
+  const [strategicMindset, setStrategicMindset] = useState("Assessment");
   const [primaryHazard, setPrimaryHazard] = useState("Wind Slab");
   const [secondaryFactors, setSecondaryFactors] = useState({
     newSnow: false,
     windLoading: false,
     temperatureRise: false,
     windSpeed: "moderate",
-    visibility: "good"
+    windDirection: "NW"
   });
 
   const handleApply = () => {
@@ -61,22 +61,23 @@ export default function AvalancheRiskAssessment({ onApplyRiskAssessment }: Avala
         <div className="space-y-6">
           {/* Strategic Mindset */}
           <div className="space-y-3">
-            <label className="text-sm font-medium text-foreground">Strategic Mindset</label>
+            <label className="text-sm font-medium text-foreground">Strategic Mindset</label> 
             <Select value={strategicMindset} onValueChange={setStrategicMindset}>
               <SelectTrigger>
                 <SelectValue placeholder="Select strategic mindset" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="Very Conservative">Very Conservative - Maximum Safety</SelectItem>
-                <SelectItem value="Conservative">Conservative - High Safety</SelectItem>
-                <SelectItem value="Moderate">Moderate - Balanced Approach</SelectItem>
-                <SelectItem value="Aggressive">Aggressive - Higher Risk Tolerance</SelectItem>
-                <SelectItem value="Very Aggressive">Very Aggressive - Maximum Risk</SelectItem>
-              </SelectContent>
+  <SelectItem value="Assessment">Assessment</SelectItem>
+  <SelectItem value="Stepping Out">Stepping Out</SelectItem>
+  <SelectItem value="Status Quo">Status Quo</SelectItem>
+  <SelectItem value="Stepping Back">Stepping Back</SelectItem>
+  <SelectItem value="Entrenchment">Entrenchment</SelectItem>
+  <SelectItem value="Open Season">Open Season</SelectItem>
+  <SelectItem value="High Alert">High Alert</SelectItem>
+  <SelectItem value="Spring Diurnal">Spring Diurnal</SelectItem>
+</SelectContent>
             </Select>
-            <p className="text-xs text-muted-foreground">
-              Choose the operational mindset that will guide run status decisions
-            </p>
+            
           </div>
 
           {/* Primary Hazard Assessment */}
@@ -91,7 +92,6 @@ export default function AvalancheRiskAssessment({ onApplyRiskAssessment }: Avala
                 <SelectItem value="Storm Slab">Storm Slab</SelectItem>
                 <SelectItem value="Persistent Slab">Persistent Slab</SelectItem>
                 <SelectItem value="Wet Slab">Wet Slab</SelectItem>
-                <SelectItem value="Cornice Fall">Cornice Fall</SelectItem>
                 <SelectItem value="Loose Snow">Loose Snow</SelectItem>
                 <SelectItem value="Glide Avalanche">Glide Avalanche</SelectItem>
               </SelectContent>
@@ -137,6 +137,31 @@ export default function AvalancheRiskAssessment({ onApplyRiskAssessment }: Avala
             </div>
           </div>
 
+{/* Wind Direction */}
+<div className="space-y-3">
+  <label className="text-sm font-medium text-foreground">Wind Direction</label>
+  <Select 
+    value={secondaryFactors.windDirection} 
+    onValueChange={(value) => 
+      setSecondaryFactors({...secondaryFactors, windDirection: value})
+    }
+  >
+    <SelectTrigger>
+      <SelectValue placeholder="Select wind direction" />
+    </SelectTrigger>
+    <SelectContent>
+      <SelectItem value="N">North (N)</SelectItem>
+      <SelectItem value="NE">Northeast (NE)</SelectItem>
+      <SelectItem value="E">East (E)</SelectItem>
+      <SelectItem value="SE">Southeast (SE)</SelectItem>
+      <SelectItem value="S">South (S)</SelectItem>
+      <SelectItem value="SW">Southwest (SW)</SelectItem>
+      <SelectItem value="W">West (W)</SelectItem>
+      <SelectItem value="NW">Northwest (NW)</SelectItem>
+    </SelectContent>
+  </Select>
+</div>
+
           {/* Wind Speed */}
           <div className="space-y-3">
             <label className="text-sm font-medium text-foreground">Wind Speed</label>
@@ -159,28 +184,8 @@ export default function AvalancheRiskAssessment({ onApplyRiskAssessment }: Avala
             </Select>
           </div>
 
-          {/* Visibility */}
-          <div className="space-y-3">
-            <label className="text-sm font-medium text-foreground">Visibility</label>
-            <Select 
-              value={secondaryFactors.visibility} 
-              onValueChange={(value) => 
-                setSecondaryFactors({...secondaryFactors, visibility: value})
-              }
-            >
-              <SelectTrigger>
-                <SelectValue placeholder="Select visibility" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="excellent">Excellent</SelectItem>
-                <SelectItem value="good">Good</SelectItem>
-                <SelectItem value="fair">Fair</SelectItem>
-                <SelectItem value="poor">Poor</SelectItem>
-                <SelectItem value="very-poor">Very Poor</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
 
+          
           {/* Action Buttons */}
           <div className="flex gap-2 pt-4">
             <Button onClick={handleApply} className="flex-1">

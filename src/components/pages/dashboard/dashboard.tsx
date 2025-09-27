@@ -13,7 +13,7 @@ import { apiRequest, queryFn } from "@/lib/queryClient";
 import RunDetailView from "@/components/run-detail-view";
 import NZTopoMap from "@/components/nz-topo-map";
 import ImageModal from "@/components/image-modal";
-import AvalancheRiskAssessment from "@/components/dashboard-filters";
+import DashboardFilters from "@/components/dashboard-filters";
 import { usePrint } from "@/components/print-provider";
 import type { Run, InsertDailyPlan, Area, SubArea } from "@/lib/schemas/schema";
 
@@ -129,120 +129,19 @@ export default function Dashboard() {
       windLoading: boolean;
       temperatureRise: boolean;
       windSpeed: string;
-      visibility: string;
+      windDirection: string;
     };
   }) => {
     // Apply risk assessment logic to suggest run statuses
     // This is where you would implement the avalanche risk assessment logic
     console.log("Applying avalanche risk assessment:", assessment);
     
-    // Example logic - you can expand this based on your requirements
-    const riskLevel = calculateRiskLevel(assessment);
     
-    // Apply suggested statuses to runs in selected areas
-    const runsToUpdate = runs.filter(run => {
-      const subArea = subAreas.find(sa => sa.id === run.subAreaId);
-      return subArea && selectedAreas.has(subArea.areaId) && 
-        (run.status === 'open' || run.status === 'conditional');
-    });
-    
-    runsToUpdate.forEach(run => {
-      const suggestedStatus = getSuggestedStatus(run, riskLevel);
-      if (suggestedStatus !== run.status) {
-        updateRunStatusMutation.mutate({
-          runId: run.id,
-          status: suggestedStatus,
-          statusComment: `Risk assessment: ${assessment.strategicMindset} mindset - ${assessment.primaryHazard} - ${riskLevel} risk`
-        });
-      }
-    });
-    
-    toast({
-      title: "Risk Assessment Applied",
-      description: `Applied ${assessment.strategicMindset} mindset (${riskLevel} risk) to ${runsToUpdate.length} runs`,
-    });
   };
 
-  const calculateRiskLevel = (assessment: {
-    strategicMindset: string;
-    primaryHazard: string;
-    secondaryFactors: {
-      newSnow: boolean;
-      windLoading: boolean;
-      temperatureRise: boolean;
-      windSpeed: string;
-      visibility: string;
-    };
-  }): string => {
-    let riskScore = 0;
-    
-    // Strategic mindset adjustment
-    const mindsetAdjustments: Record<string, number> = {
-      'Very Conservative': -2,  // Reduces risk score (more cautious)
-      'Conservative': -1,
-      'Moderate': 0,
-      'Aggressive': 1,          // Increases risk score (less cautious)
-      'Very Aggressive': 2
-    };
-    riskScore += mindsetAdjustments[assessment.strategicMindset] || 0;
-    
-    // Primary hazard scoring
-    const hazardScores: Record<string, number> = {
-      'Wind Slab': 3,
-      'Storm Slab': 2,
-      'Persistent Slab': 4,
-      'Wet Slab': 3,
-      'Cornice Fall': 2,
-      'Loose Snow': 1,
-      'Glide Avalanche': 4
-    };
-    riskScore += hazardScores[assessment.primaryHazard] || 0;
-    
-    // Secondary factors
-    if (assessment.secondaryFactors.newSnow) riskScore += 2;
-    if (assessment.secondaryFactors.windLoading) riskScore += 2;
-    if (assessment.secondaryFactors.temperatureRise) riskScore += 1;
-    
-    // Wind speed
-    const windScores: Record<string, number> = {
-      'calm': 0,
-      'light': 1,
-      'moderate': 2,
-      'strong': 3,
-      'very-strong': 4
-    };
-    riskScore += windScores[assessment.secondaryFactors.windSpeed] || 0;
-    
-    // Visibility
-    const visibilityScores: Record<string, number> = {
-      'excellent': 0,
-      'good': 1,
-      'fair': 2,
-      'poor': 3,
-      'very-poor': 4
-    };
-    riskScore += visibilityScores[assessment.secondaryFactors.visibility] || 0;
-    
-    if (riskScore >= 8) return 'high';
-    if (riskScore >= 5) return 'moderate';
-    return 'low';
-  };
+  
 
-  const getSuggestedStatus = (run: Run, riskLevel: string): string => {
-    // Base status on risk level and run characteristics
-    if (riskLevel === 'high') {
-      return 'closed';
-    } else if (riskLevel === 'moderate') {
-      // Consider run angle and exposure
-      const angle = parseFloat(run.averageAngle);
-      if (angle > 40) { // Very steep runs
-        return 'closed';
-      }
-      return 'conditional';
-    } else {
-      return 'open';
-    }
-  };
+  
 
   // Run status update mutation with optimistic updates
   const updateRunStatusMutation = useMutation({
@@ -656,7 +555,7 @@ export default function Dashboard() {
                   </Button>
                   
                   {selectedAreas.size > 0 && (
-                    <AvalancheRiskAssessment onApplyRiskAssessment={handleAvalancheRiskAssessment} />
+                    <DashboardFilters onApplyRiskAssessment={handleAvalancheRiskAssessment} />
                   )}
                 </div>
               </div>
