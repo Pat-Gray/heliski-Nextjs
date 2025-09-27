@@ -188,7 +188,7 @@ export default function NZTopoMap({
               ...prev,
               longitude: (bounds.minLon + bounds.maxLon) / 2,
               latitude: (bounds.minLat + bounds.maxLat) / 2,
-              zoom: 14
+              zoom: 11
             }));
             setHasZoomed(true);
           }
@@ -268,7 +268,7 @@ export default function NZTopoMap({
               ],
               {
                 padding: 20,
-                maxZoom: 16,
+                maxZoom: 14,
                 duration: 1000
               }
             );
