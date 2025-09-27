@@ -96,7 +96,7 @@ export default function RunDataManagement() {
     const matchesArea = !selectedArea || subAreas.find(sa => sa.id === run.subAreaId)?.areaId === selectedArea;
     
     return matchesSearch && matchesSubArea && matchesArea;
-  });
+  }).sort((a, b) => a.runNumber - b.runNumber);
 
   // Status helpers for run cards
   const getStatusColor = (status: string) => {
@@ -142,7 +142,7 @@ export default function RunDataManagement() {
           <div className="flex items-center space-x-2">
             <Button variant="ghost" size="sm" onClick={resetNavigation}>
               <Database className="w-4 h-4 mr-1" />
-              All Data
+              All A
             </Button>
             {navigationStack.map((item, index) => (
               <div key={item.id} className="flex items-center space-x-2">
@@ -284,9 +284,12 @@ export default function RunDataManagement() {
                               </p>
                             </div>
                           </div>
-                          <Badge className={getStatusColor(run.status)}>
-                            {getStatusLabel(run.status)}
-                          </Badge>
+                          <div className="flex items-center gap-2">
+                            <Badge className={getStatusColor(run.status)}>
+                              {getStatusLabel(run.status)}
+                            </Badge>
+                            
+                          </div>
                         </div>
                         {run.statusComment && (
                           <p className="text-xs text-muted-foreground italic">

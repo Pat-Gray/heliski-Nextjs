@@ -9,9 +9,10 @@ import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
-import { Mountain, AlertTriangle, MapPin, Edit2, Save, X, Eye, Plus } from 'lucide-react';
+import { Mountain, AlertTriangle, MapPin, Edit2, Save, X, Eye, Plus, Upload } from 'lucide-react';
 import Image from 'next/image';
 import type { Run, SubArea } from '@/lib/schemas/schema';
+import GpxUpdateButton from './gpx-update-button';
 
 interface RunDetailViewProps {
   runId: string | null;
@@ -103,11 +104,15 @@ export default function RunDetailView({ runId }: RunDetailViewProps) {
 
   const getStatusColor = (status: string) => {
     switch (status) {
-      case 'open': return 'bg-green-100 text-green-800';
-      case 'conditional': return 'bg-yellow-100 text-yellow-800';
-      case 'closed': return 'bg-red-100 text-red-800';
-      default: return 'bg-gray-100 text-gray-800';
+      case 'open': return 'bg-green-500 text-white';
+      case 'conditional': return 'bg-orange-500 text-white';
+      case 'closed': return 'bg-red-500 text-white';
+      default: return 'bg-gray-500 text-white';
     }
+  };
+
+  const capitalizeFirstLetter = (str: string) => {
+    return str.charAt(0).toUpperCase() + str.slice(1);
   };
 
   const handleEdit = (field: 'description' | 'notes') => {
@@ -145,18 +150,64 @@ export default function RunDetailView({ runId }: RunDetailViewProps) {
       {/* Header */}
       <div className="p-4 border-b bg-white">
         <div className="flex items-center justify-between mb-3">
-        
-          {selectedRun.gpxPath && (
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => setShowMap(!showMap)}
-              className="flex items-center gap-2"
-            >
-              <MapPin className="h-4 w-4" />
-              {showMap ? 'Hide Map' : 'View Map'}
-            </Button>
-          )}
+          <div className="flex items-center gap-2">
+            {selectedRun.gpxPath ? (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setShowMap(!showMap)}
+                className="flex items-center gap-2"
+              >
+                <MapPin className="h-4 w-4" />
+                {showMap ? 'Hide Map' : 'View Map'}
+              </Button>
+            ) : (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  const input = document.createElement('input');
+                  input.type = 'file';
+                  input.accept = '.gpx';
+                  input.onchange = async (e) => {
+                    const file = (e.target as HTMLInputElement).files?.[0];
+                    if (file) {
+                      try {
+                        const formData = new FormData();
+                        formData.append('file', file);
+                        formData.append('runId', selectedRun.id);
+                        formData.append('fieldName', 'gpxPath');
+                        
+                        const response = await fetch('/api/upload', {
+                          method: 'POST',
+                          body: formData,
+                        });
+                        
+                        if (response.ok) {
+                          const { url } = await response.json();
+                          const updateResponse = await fetch(`/api/runs/${selectedRun.id}`, {
+                            method: 'PATCH',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ gpxPath: url }),
+                          });
+                          if (updateResponse.ok) {
+                            queryClient.invalidateQueries({ queryKey: ['/api/runs'] });
+                          }
+                        }
+                      } catch (error) {
+                        console.error('Failed to upload GPX file:', error);
+                      }
+                    }
+                  };
+                  input.click();
+                }}
+                className="flex items-center gap-2"
+              >
+                <Upload className="h-4 w-4" />
+                Upload GPX
+              </Button>
+            )}
+          </div>
       </div>
       
         {/* Run Title and Status */}
@@ -165,13 +216,15 @@ export default function RunDetailView({ runId }: RunDetailViewProps) {
             <h2 className="text-xl font-bold">{selectedRun.name}</h2>
             <span className="text-sm text-muted-foreground">#{selectedRun.runNumber}</span>
             <Badge className={getStatusColor(selectedRun.status)}>
-              {selectedRun.status}
+              {capitalizeFirstLetter(selectedRun.status)}
             </Badge>
+              
+
           </div>
         </div>
 
         {/* Run Information Grid */}
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+        <div className="grid grid-cols-2 md:grid-cols-5 gap-2 text-sm">
           <div>
             <span className="text-muted-foreground">Sub-Area:</span>
             <span className="ml-1 font-medium">{getSubAreaName(selectedRun.subAreaId || '') || 'N/A'}</span>
@@ -182,7 +235,7 @@ export default function RunDetailView({ runId }: RunDetailViewProps) {
           </div>
           <div>
             <span className="text-muted-foreground">Angle:</span>
-            <span className="ml-1 font-medium">{selectedRun.averageAngle || 'N/A'}</span>
+            <span className="ml-1 font-medium">{selectedRun.averageAngle ? capitalizeFirstLetter(selectedRun.averageAngle) : 'N/A'}</span>
           </div>
           <div>
             <span className="text-muted-foreground">Elevation:</span>
@@ -193,6 +246,10 @@ export default function RunDetailView({ runId }: RunDetailViewProps) {
               }
             </span>
           </div>
+          <GpxUpdateButton 
+                              runId={selectedRun.id} 
+                              currentGpxPath={selectedRun.gpxPath}
+                            />  
           </div>
         </div>
 

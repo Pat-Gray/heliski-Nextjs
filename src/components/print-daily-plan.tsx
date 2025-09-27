@@ -55,10 +55,11 @@ export default function PrintDailyPlan({
         {areas
           .filter(area => selectedAreas.has(area.id))
           .map(area => {
+            const areaSubAreas = subAreas.filter(sa => sa.areaId === area.id);
             const areaRuns = filteredRuns.filter(run => {
               const subArea = subAreas.find(sa => sa.id === run.subAreaId);
               return subArea && subArea.areaId === area.id;
-            }).sort((a, b) => a.runNumber - b.runNumber);
+            });
 
             if (areaRuns.length === 0) return null;
 
@@ -68,25 +69,41 @@ export default function PrintDailyPlan({
                   {area.name}
                 </div>
                 
-                <div className="print-runs-table">
-                  <div className="print-runs-header">
-                    <div className="print-col-run">#</div>
-                    <div className="print-col-name">Run Name</div>
-                    <div className="print-col-status">Status</div>
-                    <div className="print-col-comment">Comment</div>
-                  </div>
-                  
-                  {areaRuns.map(run => (
-                    <div key={run.id} className={`print-run-row ${run.status}`}>
-                      <div className="print-col-run">{run.runNumber}</div>
-                      <div className="print-col-name">{run.name}</div>
-                      <div className={`print-col-status ${run.status}`}>
-                        {run.status === 'open' ? 'O' : run.status === 'conditional' ? 'C' : 'X'}
+                {areaSubAreas.map(subArea => {
+                  const subAreaRuns = areaRuns
+                    .filter(run => run.subAreaId === subArea.id)
+                    .sort((a, b) => a.runNumber - b.runNumber);
+
+                  if (subAreaRuns.length === 0) return null;
+
+                  return (
+                    <div key={subArea.id} className="print-subarea">
+                      <div className="print-subarea-header">
+                        {subArea.name}
                       </div>
-                      <div className="print-col-comment">{run.statusComment || '-'}</div>
+                      
+                      <div className="print-runs-table">
+                        <div className="print-runs-header">
+                          <div className="print-col-run">#</div>
+                          <div className="print-col-name">Run Name</div>
+                          <div className="print-col-status">Status</div>
+                          <div className="print-col-comment">Comment</div>
+                        </div>
+                        
+                        {subAreaRuns.map(run => (
+                          <div key={run.id} className={`print-run-row ${run.status}`}>
+                            <div className="print-col-run">{run.runNumber}</div>
+                            <div className="print-col-name">{run.name}</div>
+                            <div className={`print-col-status ${run.status}`}>
+                              {run.status === 'open' ? 'O' : run.status === 'conditional' ? 'C' : 'X'}
+                            </div>
+                            <div className="print-col-comment">{run.statusComment || '-'}</div>
+                          </div>
+                        ))}
+                      </div>
                     </div>
-                  ))}
-                </div>
+                  );
+                })}
               </div>
             );
           })}

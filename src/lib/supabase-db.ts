@@ -63,7 +63,7 @@ export async function getRuns() {
   const { data, error } = await supabase
     .from('runs')
     .select('*')
-    .order('created_at', { ascending: false });
+    .order('run_number', { ascending: true });
   
   if (error) throw error;
   
