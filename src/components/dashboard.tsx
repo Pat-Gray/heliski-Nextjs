@@ -495,15 +495,15 @@ export default function Dashboard() {
   return (
     <div className="h-full flex flex-col">
       {/* Top Header */}
-      <header className="no-print bg-card border-b border-border px-6 py-4 flex-shrink-0">
-        <div className="flex items-center justify-between">
+      <header className="no-print bg-card border-b border-border px-4 lg:px-6 py-4 flex-shrink-0">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div className="flex items-center space-x-4">
             <div>
-              <h2 className="text-2xl font-bold text-foreground">Run Management</h2>
-              <p className="text-muted-foreground">Today: <span data-testid="text-current-date">{currentDate || 'Loading...'}</span></p>
+              <h2 className="text-xl lg:text-2xl font-bold text-foreground">Run Management</h2>
+              <p className="text-sm lg:text-base text-muted-foreground">Today: <span data-testid="text-current-date">{currentDate || 'Loading...'}</span></p>
             </div>
           </div>
-          <div className="flex items-center space-x-4">
+          <div className="flex flex-col sm:flex-row items-stretch sm:items-center space-y-2 sm:space-y-0 sm:space-x-4">
             <Button 
               onClick={handleSubmitDailyPlan}
               disabled={submitDailyPlanMutation.isPending}
@@ -543,10 +543,10 @@ export default function Dashboard() {
       </header>
 
       {/* Content Area */}
-      <main className="flex-1 flex min-h-0">
+      <main className="flex-1 flex flex-col lg:flex-row min-h-0">
         {/* Runs List */}
-        <div className="w-1/2 border-r border-border overflow-y-auto">
-          <div className="p-6">
+        <div className="w-full lg:w-1/2 border-r-0 lg:border-r border-b lg:border-b-0 border-border overflow-y-auto">
+          <div className="p-4 lg:p-6">
             {/* Area Selection */}
             <div className="mb-6">
               <div className="flex items-center justify-between mb-3">
@@ -568,7 +568,7 @@ export default function Dashboard() {
 
               {/* Area Selection Grid */}
               {showAreaSelection && (
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-1 xl:grid-cols-2 gap-3 mb-4">
                   {areas.map(area => (
                     <Card 
                       key={area.id} 
@@ -652,7 +652,8 @@ export default function Dashboard() {
                                       onClick={() => handleViewMap(subArea.id)}
                                       className="text-xs"
                                     >
-                                      View Map
+                                      <span className="hidden xl:inline">View Map</span>
+                                      <span className="xl:hidden">Map (XL+)</span>
                                     </Button>
                                   </div>
                                   <div className="space-y-1">
@@ -669,18 +670,18 @@ export default function Dashboard() {
                                         onMouseEnter={() => setHoveredRunId(run.id)}
                                         onMouseLeave={() => setHoveredRunId(null)}
                                       >
-                                        <div className="flex items-center justify-between mb-2">
-                                          <div className="flex items-center space-x-3">
-                                            <div className={`w-3 h-3 rounded-full ${
+                                        <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-2 gap-2">
+                                          <div className="flex items-center space-x-3 flex-1 min-w-0">
+                                            <div className={`w-3 h-3 rounded-full flex-shrink-0 ${
                                               run.status === "open" 
                                                 ? "bg-green-500" 
                                                 : run.status === "conditional" 
                                                 ? "bg-orange-500" 
                                                 : "bg-red-500"
                                             }`} />
-                                            <div>
-                                              <div className="font-medium">#{run.runNumber} {run.name}</div>
-                                              <div className="text-sm text-muted-foreground">
+                                            <div className="min-w-0 flex-1">
+                                              <div className="font-medium truncate">#{run.runNumber} {run.name}</div>
+                                              <div className="text-sm text-muted-foreground truncate">
                                                 {run.aspect} • {run.averageAngle} • {run.elevationMax}-{run.elevationMin}m
                                               </div>
                                             </div>
@@ -688,48 +689,51 @@ export default function Dashboard() {
                                               size="sm"
                                               variant="outline"
                                               onClick={() => handleViewRunDetails(run)}
-                                              className="text-xs hover:bg-blue-50 hover:text-blue-700 hover:border-blue-300"
+                                              className="text-xs hover:bg-blue-50 hover:text-blue-700 hover:border-blue-300 flex-shrink-0"
                                             >
                                               <Image className="w-3 h-3 mr-1" />
-                                              Details
+                                              <span className="hidden sm:inline">Details</span>
                                             </Button>
                                           </div>
-                                          <div className="flex items-center space-x-2">
+                                          <div className="flex items-center space-x-1 sm:space-x-2 flex-wrap">
                                             <Button
                                               size="sm"
                                               variant={run.status === "open" ? "default" : "outline"}
                                               onClick={() => handleRunStatusChange(run.id, "open")}
-                                              className={`${
+                                              className={`text-xs ${
                                                 run.status === "open" 
                                                   ? "bg-green-500 hover:bg-green-600 text-white" 
                                                   : "hover:bg-green-50 hover:text-green-700 hover:border-green-300"
                                               }`}
                                             >
-                                              Open
+                                              <span className="hidden sm:inline">Open</span>
+                                              <span className="sm:hidden">O</span>
                                             </Button>
                                             <Button
                                               size="sm"
                                               variant={run.status === "conditional" ? "default" : "outline"}
                                               onClick={() => handleRunStatusChange(run.id, "conditional")}
-                                              className={`${
+                                              className={`text-xs ${
                                                 run.status === "conditional" 
                                                   ? "bg-orange-500 hover:bg-orange-600 text-white" 
                                                   : "hover:bg-orange-50 hover:text-orange-700 hover:border-orange-300"
                                               }`}
                                             >
-                                              Conditional
+                                              <span className="hidden sm:inline">Conditional</span>
+                                              <span className="sm:hidden">C</span>
                                             </Button>
                                             <Button
                                               size="sm"
                                               variant={run.status === "closed" ? "default" : "outline"}
                                               onClick={() => handleRunStatusChange(run.id, "closed")}
-                                              className={`${
+                                              className={`text-xs ${
                                                 run.status === "closed" 
                                                   ? "bg-red-500 hover:bg-red-600 text-white" 
                                                   : "hover:bg-red-50 hover:text-red-700 hover:border-red-300"
                                               }`}
                                             >
-                                              Closed
+                                              <span className="hidden sm:inline">Closed</span>
+                                              <span className="sm:hidden">X</span>
                                             </Button>
                                           </div>
                                         </div>
@@ -770,24 +774,39 @@ export default function Dashboard() {
         </div>
 
         {/* Map or Run Detail View */}
-        <div className="w-1/2 overflow-y-auto">
+        <div className="w-full lg:w-1/2 overflow-y-auto">
           {showMap && selectedAreaForMap ? (
-            <NZTopoMap
-              areaId={selectedAreaForMap}
-              subAreaId={selectedSubAreaForMap ?? undefined}
-              selectedRunId={selectedRunId ?? undefined}
-              hoveredRunId={hoveredRunId ?? undefined}
-              onClose={() => {
-                setShowMap(false);
-                setSelectedAreaForMap(null);
-                setSelectedSubAreaForMap(null);
-              }}
-            />
+            <>
+              {/* Map - Only visible on xl screens and up (1280px+) */}
+              <div className="hidden xl:block h-full">
+                <NZTopoMap
+                  areaId={selectedAreaForMap}
+                  subAreaId={selectedSubAreaForMap ?? undefined}
+                  selectedRunId={selectedRunId ?? undefined}
+                  hoveredRunId={hoveredRunId ?? undefined}
+                  onClose={() => {
+                    setShowMap(false);
+                    setSelectedAreaForMap(null);
+                    setSelectedSubAreaForMap(null);
+                  }}
+                />
+              </div>
+              {/* Run Detail View - Visible on screens below xl (below 1280px) */}
+              <div className="xl:hidden h-full">
+                <RunDetailView 
+                  runId={selectedRunId} 
+                  focusStatusComment={focusStatusComment}
+                />
+              </div>
+            </>
           ) : (
-            <RunDetailView 
-              runId={selectedRunId} 
-              focusStatusComment={focusStatusComment}
-            />
+            /* Run Detail View - Always visible when map is not shown */
+            <div className="h-full">
+              <RunDetailView 
+                runId={selectedRunId} 
+                focusStatusComment={focusStatusComment}
+              />
+            </div>
           )}
         </div>
       </main>

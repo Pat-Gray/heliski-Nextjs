@@ -431,7 +431,7 @@ export default function NZTopoMap({
   }
 
   return (
-    <div className="relative h-full w-full">
+    <div className="relative h-full w-full min-h-[400px] sm:min-h-[500px]">
       {/* Map Container */}
       <div className="h-full w-full">
         <Map

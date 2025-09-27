@@ -164,13 +164,13 @@ export default function DailyPlans() {
 
       {/* Main Content */}
       <div className="flex-1 flex flex-col">
-        <header className="bg-card border-b border-border px-6 py-4 flex-shrink-0">
+        <header className="bg-card border-b border-border px-4 lg:px-6 py-4 flex-shrink-0">
           <div className="flex items-center justify-between">
-            <h2 className="text-2xl font-bold text-foreground">Daily Planning</h2>
+            <h2 className="text-xl lg:text-2xl font-bold text-foreground">Daily Planning</h2>
           </div>
         </header>
 
-        <main className="flex-1 p-6 min-h-0">
+        <main className="flex-1 p-4 lg:p-6 min-h-0">
           {isLoading ? (
             <div className="flex items-center justify-center h-full">
               <div className="text-center">

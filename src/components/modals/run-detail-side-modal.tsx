@@ -37,11 +37,11 @@ export default function RunDetailSideModal({
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="max-w-4xl max-h-[90vh] w-full h-full p-0 overflow-hidden">
+      <DialogContent className="max-w-4xl max-h-[90vh] w-full h-full p-0 overflow-hidden mx-4 sm:mx-0">
         <div className="flex flex-col h-full">
           {/* Header */}
-          <div className="flex items-center justify-between p-4 border-b bg-white flex-shrink-0">
-            <h2 className="text-lg font-semibold">Run Details</h2>
+          <div className="flex items-center justify-between p-3 sm:p-4 border-b bg-white flex-shrink-0">
+            <h2 className="text-base sm:text-lg font-semibold">Run Details</h2>
            
           </div>
           

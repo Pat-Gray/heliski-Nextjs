@@ -232,20 +232,18 @@ export default function RunDetailView({ runId }: RunDetailViewProps) {
       </div>
       
         {/* Run Title and Status */}
-        <div className="flex items-center justify-between mb-3">
-          <div className="flex items-center gap-3">
-            <h2 className="text-xl font-bold">{selectedRun.name}</h2>
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-3 gap-2">
+          <div className="flex flex-wrap items-center gap-2 sm:gap-3">
+            <h2 className="text-lg sm:text-xl font-bold truncate">{selectedRun.name}</h2>
             <span className="text-sm text-muted-foreground">#{selectedRun.runNumber}</span>
             <Badge className={getStatusColor(selectedRun.status)}>
               {capitalizeFirstLetter(selectedRun.status)}
             </Badge>
-              
-
           </div>
         </div>
 
         {/* Run Information Grid */}
-        <div className="grid grid-cols-2 md:grid-cols-5 gap-2 text-sm">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-2 text-sm">
           <div>
             <span className="text-muted-foreground">Sub-Area:</span>
             <span className="ml-1 font-medium">{getSubAreaName(selectedRun.subAreaId || '') || 'N/A'}</span>
@@ -288,7 +286,7 @@ export default function RunDetailView({ runId }: RunDetailViewProps) {
           <div className="h-full overflow-y-auto p-4 space-y-4">
 
             {/* Run Description and Notes - Two Columns */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
               {/* Run Description */}
               <Card>
                 <CardHeader className="pb-3">
@@ -433,7 +431,7 @@ export default function RunDetailView({ runId }: RunDetailViewProps) {
               <CardContent>
                 <div className="space-y-4">
                   {/* Main Photos */}
-                  <div className="grid grid-cols-2 gap-3">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                     {/* Run Photo */}
                     <div>
                       <div className="flex items-center justify-between mb-1">
@@ -625,7 +623,7 @@ export default function RunDetailView({ runId }: RunDetailViewProps) {
                         <Plus className="h-3 w-3" />
                       </Button>
                     </div>
-                    <div className="grid grid-cols-4 gap-1">
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-1">
                       {selectedRun.additionalPhotos?.slice(0, 4).map((photo, index) => (
                         <div key={index} className="h-16 border rounded overflow-hidden relative group">
                           <Image

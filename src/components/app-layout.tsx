@@ -1,8 +1,9 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { usePathname } from "next/navigation";
-import { Mountain } from "lucide-react";
+import { Mountain, Menu, X } from "lucide-react";
+import { Button } from "@/components/ui/button";
 import Navigation from "@/components/navigation";
 import QuickStats from "@/components/quick-stats";
 import { useQuery } from "@tanstack/react-query";
@@ -14,8 +15,26 @@ interface AppLayoutProps {
 }
 
 export function AppLayout({ children }: AppLayoutProps) {
-  const [sidebarOpen] = useState(true);
+  const [sidebarOpen, setSidebarOpen] = useState(false);
   const pathname = usePathname();
+
+  // Auto-open sidebar on larger screens
+  useEffect(() => {
+    const handleResize = () => {
+      if (window.innerWidth >= 1024) { // lg breakpoint
+        setSidebarOpen(true);
+      } else {
+        setSidebarOpen(false);
+      }
+    };
+
+    // Set initial state
+    handleResize();
+
+    // Listen for resize events
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
 
   // Fetch data for QuickStats
   const { data: areas = [] } = useQuery<Area[]>({
@@ -49,20 +68,41 @@ export function AppLayout({ children }: AppLayoutProps) {
 
   return (
     <div className="flex h-screen overflow-hidden bg-background">
+      {/* Mobile Overlay */}
+      {sidebarOpen && (
+        <div 
+          className="fixed inset-0 bg-black/50 z-40 lg:hidden"
+          onClick={() => setSidebarOpen(false)}
+        />
+      )}
+      
       {/* Sidebar */}
-      <div className={`${sidebarOpen ? 'w-80' : 'w-0'} bg-card border-r border-border flex flex-col transition-all duration-300 overflow-hidden`}>
+      <div className={`${
+        sidebarOpen ? 'w-64 lg:w-80' : 'w-0 lg:w-64 xl:w-80'
+      } bg-card border-r border-border flex flex-col transition-all duration-300 overflow-hidden fixed lg:relative z-50 lg:z-auto`}>
         {/* Header */}
-        <div className="p-6 border-b border-border">
-          <div className="flex items-center space-x-3">
-            <div className="w-10 h-10 bg-primary rounded-lg flex items-center justify-center">
-              <Mountain className="w-6 h-6 text-primary-foreground" />
+        <div className="p-4 lg:p-6 border-b border-border">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center space-x-3">
+              <div className="w-8 h-8 lg:w-10 lg:h-10 bg-primary rounded-lg flex items-center justify-center">
+                <Mountain className="w-4 h-4 lg:w-6 lg:h-6 text-primary-foreground" />
+              </div>
+              <div className="min-w-0">
+                <h1 className="text-lg lg:text-xl font-bold text-foreground truncate">Heli-Ski Ops</h1>
+                <p className="text-xs lg:text-sm text-muted-foreground truncate">
+                  {pathname === "/" ? "Operations Dashboard" : "Run Data Management"}
+                </p>
+              </div>
             </div>
-            <div>
-              <h1 className="text-xl font-bold text-foreground">Heli-Ski Ops</h1>
-              <p className="text-sm text-muted-foreground">
-                {pathname === "/" ? "Operations Dashboard" : "Run Data Management"}
-              </p>
-            </div>
+            {/* Close button for mobile */}
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => setSidebarOpen(false)}
+              className="lg:hidden h-8 w-8 p-0"
+            >
+              <X className="h-4 w-4" />
+            </Button>
           </div>
         </div>
 
@@ -70,7 +110,7 @@ export function AppLayout({ children }: AppLayoutProps) {
         <Navigation />
 
         {/* Quick Stats */}
-        <div className="p-4 mt-auto">
+        <div className="p-3 lg:p-4 mt-auto">
           <QuickStats
             areas={areas.length}
             subAreas={subAreas.length}
@@ -84,32 +124,18 @@ export function AppLayout({ children }: AppLayoutProps) {
 
       {/* Main Content */}
       <div className="flex-1 flex flex-col overflow-hidden">
-        {/* Top Header */}
-        {/* <header className="bg-card border-b border-border px-6 py-4">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center space-x-4">
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setSidebarOpen(!sidebarOpen)}
-                className="lg:hidden"
-              >
-                <Menu className="w-4 h-4" />
-              </Button>
-              <div>
-                <h2 className="text-2xl font-bold text-foreground">
-                  {pathname === "/" ? "Run Management" : "Run Data Management"}
-                </h2>
-                <p className="text-muted-foreground">
-                  {pathname === "/" 
-                    ? "Operations Dashboard" 
-                    : "Manage areas, sub-areas, and ski runs"
-                  }
-                </p>
-              </div>
-            </div>
-          </div>
-        </header> */}
+        {/* Mobile Menu Button */}
+        <div className="lg:hidden p-4 border-b border-border bg-card">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setSidebarOpen(true)}
+            className="flex items-center gap-2"
+          >
+            <Menu className="w-4 h-4" />
+            Menu
+          </Button>
+        </div>
 
         {/* Content Area */}
         <main className="flex-1 overflow-hidden">

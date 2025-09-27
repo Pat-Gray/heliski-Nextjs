@@ -131,15 +131,15 @@ export default function RunDataManagement() {
   return (
     <div className="h-full flex flex-col">
       {/* Header */}
-      <header className="bg-card border-b border-border px-6 py-4 flex-shrink-0">
-        <h2 className="text-2xl font-bold text-foreground">Run Data Management</h2>
-        <p className="text-muted-foreground">Manage areas, sub-areas, and ski runs</p>
+      <header className="bg-card border-b border-border px-4 lg:px-6 py-4 flex-shrink-0">
+        <h2 className="text-xl lg:text-2xl font-bold text-foreground">Run Data Management</h2>
+        <p className="text-sm lg:text-base text-muted-foreground">Manage areas, sub-areas, and ski runs</p>
       </header>
 
       {/* Navigation Breadcrumb */}
       {navigationStack.length > 0 && (
-        <div className="bg-card border-b border-border px-6 py-3 flex-shrink-0">
-          <div className="flex items-center space-x-2">
+        <div className="bg-card border-b border-border px-4 lg:px-6 py-3 flex-shrink-0">
+          <div className="flex items-center space-x-2 overflow-x-auto">
             <Button variant="ghost" size="sm" onClick={resetNavigation}>
               <Database className="w-4 h-4 mr-1" />
               Areas
@@ -175,7 +175,7 @@ export default function RunDataManagement() {
       )}
 
       {/* Search */}
-      <div className="p-6 pb-0 flex-shrink-0">
+      <div className="p-4 lg:p-6 pb-0 flex-shrink-0">
         <div className="relative max-w-md">
           <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground w-4 h-4" />
           <input
@@ -189,10 +189,10 @@ export default function RunDataManagement() {
       </div>
 
       {/* Main Content */}
-      <div className="flex-1 flex min-h-0">
+      <div className="flex-1 flex flex-col lg:flex-row min-h-0">
         {/* Left Panel */}
-        <div className="w-1/3 border-r border-border overflow-y-auto">
-          <div className="p-6">
+        <div className="w-full lg:w-1/3 border-r-0 lg:border-r border-b lg:border-b-0 border-border overflow-y-auto">
+          <div className="p-4 lg:p-6">
             {/* Areas */}
             {!selectedArea && !selectedSubArea && (
               <div>
@@ -306,7 +306,7 @@ export default function RunDataManagement() {
         </div>
 
         {/* Right Panel */}
-        <div className="flex-1 overflow-hidden">
+        <div className="w-full lg:flex-1 overflow-hidden">
           {selectedRunId ? (
             <RunDetailView
               runId={selectedRunId}
