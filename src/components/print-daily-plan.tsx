@@ -26,8 +26,8 @@ export default function PrintDailyPlan({
   return (
     <div className="print-only">
       <div className="print-header">
-        <h1>Heli-Ski Daily Operations Plan</h1>
-        <div className="print-date">{currentDate}</div>
+        <h1>Heli-Ski Daily Operations Plan - {currentDate}</h1>
+      
       </div>
       
       {/* <div className="print-summary">
@@ -109,10 +109,6 @@ export default function PrintDailyPlan({
           })}
       </div>
       
-      <div className="print-footer">
-        <p>Generated on {currentDate} - Heli-Ski Operations Dashboard</p>
-        <p>Total Areas: {Array.from(selectedAreas).length} | Total Runs: {filteredRuns.length}</p>
-      </div>
     </div>
   );
 }
