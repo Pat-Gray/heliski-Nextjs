@@ -3,7 +3,7 @@ import Map, { Source, Layer, MapRef } from 'react-map-gl/mapbox';
 import type { FeatureCollection, LineString, Point } from 'geojson';
 import { useRunsForArea } from '@/hooks/use-runs-for-area';
 import { parseGPXToGeoJSON } from '@/utils/gpx-parser';
-import { Loader2, MapPin, AlertTriangle, Plus, Minus } from 'lucide-react';
+import { Loader2, MapPin, AlertTriangle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import type { Run } from '@/lib/schemas/schema';
 
@@ -83,7 +83,7 @@ export default function NZTopoMap({
   const [viewState, setViewState] = useState({
     longitude: 174.0,
     latitude: -41.0,
-    zoom: 8,
+    zoom: 11,
     bearing: 0,
     pitch: 0
   });
@@ -182,13 +182,13 @@ export default function NZTopoMap({
         if (processedRuns.length > 0 && !hasZoomed) {
           const bounds = calculateGPXBounds(processedRuns);
           if (bounds) {
-            console.log('Setting up zoom for bounds:', bounds);
-            // Store bounds for later use when map is ready
+            console.log('Setting up initial view for bounds:', bounds);
+            // Set initial view state to center of bounds
             setViewState(prev => ({
               ...prev,
               longitude: (bounds.minLon + bounds.maxLon) / 2,
               latitude: (bounds.minLat + bounds.maxLat) / 2,
-              zoom: 11
+              zoom: 11 // Higher initial zoom for better area visibility
             }));
             setHasZoomed(true);
           }
@@ -212,46 +212,44 @@ export default function NZTopoMap({
 
   // Mouse enter/leave handlers removed - GPX tracks are no longer interactive
 
-  // Handle zoom controls
-  const handleZoomIn = useCallback(() => {
-    if (mapRef.current) {
-      mapRef.current.zoomIn();
-    }
-  }, []);
+  // Auto-zoom to appropriate level based on area bounds
+  const autoZoomToArea = useCallback(() => {
+    if (!mapRef.current || runs.length === 0) return;
 
-  const handleZoomOut = useCallback(() => {
-    if (mapRef.current) {
-      mapRef.current.zoomOut();
+    const bounds = calculateGPXBounds(runs);
+    if (bounds) {
+      console.log('Auto-zooming to area bounds:', bounds);
+      mapRef.current.fitBounds(
+        [
+          [bounds.minLon, bounds.minLat],
+          [bounds.maxLon, bounds.maxLat]
+        ],
+        {
+          padding: 50,
+          maxZoom: 13,
+          duration: 0 // Instant zoom, no animation
+        }
+      );
     }
-  }, []);
+  }, [runs]);
 
   // Memoized onLoad handlers to prevent infinite re-renders
   const handleMapLoad = useCallback(() => {
     console.log('Map loaded successfully');
     
-    // Fit bounds to GPX data when map loads
+    // Auto-zoom to area when map loads
     if (runs.length > 0) {
-      const bounds = calculateGPXBounds(runs);
-      if (bounds && mapRef.current) {
-        console.log('Fitting bounds on map load:', bounds);
-        setTimeout(() => {
-          if (mapRef.current) {
-            mapRef.current.fitBounds(
-              [
-                [bounds.minLon, bounds.minLat],
-                [bounds.maxLon, bounds.maxLat]
-              ],
-              {
-                padding: 20,
-                maxZoom: 14,
-                duration: 1000
-              }
-            );
-          }
-        }, 1000); // Increased timeout to ensure map is fully ready
-      }
+      autoZoomToArea();
     }
-  }, [runs]);
+  }, [runs, autoZoomToArea]);
+
+  // Auto-zoom when runs change (but not on status updates)
+  useEffect(() => {
+    if (runs.length > 0 && mapRef.current) {
+      // Immediate auto-zoom for better responsiveness
+      autoZoomToArea();
+    }
+  }, [runs, autoZoomToArea]);
 
   const handleNZTopoSourceLoad = useCallback(() => {
     console.log('NZ Topo source loaded successfully');
@@ -434,26 +432,6 @@ export default function NZTopoMap({
 
   return (
     <div className="relative h-full w-full">
-      {/* Zoom Controls */}
-      <div className="absolute top-4 right-4 z-10 flex flex-col gap-2">
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={handleZoomIn}
-          className="h-8 w-8 p-0 bg-white/90 hover:bg-white shadow-md"
-        >
-          <Plus className="h-4 w-4" />
-        </Button>
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={handleZoomOut}
-          className="h-8 w-8 p-0 bg-white/90 hover:bg-white shadow-md"
-        >
-          <Minus className="h-4 w-4" />
-        </Button>
-      </div>
-
       {/* Map Container */}
       <div className="h-full w-full">
         <Map

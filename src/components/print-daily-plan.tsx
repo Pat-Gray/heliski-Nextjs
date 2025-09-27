@@ -19,9 +19,9 @@ export default function PrintDailyPlan({
   filteredRuns,
   selectedAreas,
   currentDate,
-  greenCount,
-  orangeCount,
-  redCount,
+  greenCount: _greenCount,
+  orangeCount: _orangeCount,
+  redCount: _redCount,
 }: PrintDailyPlanProps) {
   return (
     <div className="print-only">

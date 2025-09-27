@@ -11,9 +11,9 @@ import {
   Database,
   ChevronRight
 } from "lucide-react";
-import AreaFormModal from "@/components/area-form-modal";
-import SubAreaFormModal from "@/components/subarea-form-modal";
-import RunFormModal from "@/components/run-form-modal";
+import AreaFormModal from "@/components/modals/area-form-modal";
+import SubAreaFormModal from "@/components/modals/subarea-form-modal";
+import RunFormModal from "@/components/modals/run-form-modal";
 import RunDetailView from "@/components/run-detail-view";
 import type { Area, SubArea, Run } from "@/lib/schemas/schema";
 import { queryFn } from "@/lib/queryClient";
@@ -142,7 +142,7 @@ export default function RunDataManagement() {
           <div className="flex items-center space-x-2">
             <Button variant="ghost" size="sm" onClick={resetNavigation}>
               <Database className="w-4 h-4 mr-1" />
-              All A
+              Areas
             </Button>
             {navigationStack.map((item, index) => (
               <div key={item.id} className="flex items-center space-x-2">

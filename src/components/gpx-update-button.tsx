@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { Button } from '@/components/ui/button';
-import { Upload, MapPin, Trash2 } from 'lucide-react';
+import { Upload, MapPin } from 'lucide-react';
 
 interface GpxUpdateButtonProps {
   runId: string;
@@ -56,21 +56,6 @@ export default function GpxUpdateButton({ runId, currentGpxPath, onUpdate }: Gpx
     input.click();
   };
 
-  const handleRemove = async () => {
-    try {
-      const response = await fetch(`/api/runs/${runId}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ gpxPath: null }),
-      });
-      if (response.ok) {
-        queryClient.invalidateQueries({ queryKey: ['/api/runs'] });
-        onUpdate?.();
-      }
-    } catch (error) {
-      console.error('Failed to remove GPX file:', error);
-    }
-  };
 
   return (
     <div className="flex items-center gap-1">

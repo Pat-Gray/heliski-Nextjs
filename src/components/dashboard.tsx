@@ -7,12 +7,12 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
-import { Mountain, Plus, CheckCircle, MapPin, Image, Loader2 } from "lucide-react";
+import { Mountain, Plus, CheckCircle, MapPin, Image, Loader2, Printer } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryFn } from "@/lib/queryClient";
 import RunDetailView from "@/components/run-detail-view";
-import RunDetailSideModal from "@/components/run-detail-side-modal";
-import NZTopoMap from "@/components/nz-topo-map";
+import RunDetailSideModal from "@/components/modals/run-detail-side-modal";
+import NZTopoMap from "@/components/maps/nz-topo-map";
 import DashboardFilters from "@/components/dashboard-filters";
 import { usePrint } from "@/components/print-provider";
 import type { Run, InsertDailyPlan, Area, SubArea } from "@/lib/schemas/schema";
@@ -534,8 +534,10 @@ export default function Dashboard() {
               variant="outline"
               className="ml-2"
             >
-              Test Print
+       <Printer className="h-4 w-4" />
+       <span>Print Plan</span>
             </Button>
+            
           </div>
         </div>
       </header>

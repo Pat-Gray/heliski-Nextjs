@@ -2,7 +2,7 @@
 
 import { useEffect } from 'react';
 import { Dialog, DialogContent } from "@/components/ui/dialog";
-import RunDetailView from "./run-detail-view";
+import RunDetailView from "../run-detail-view";
 
 interface RunDetailSideModalProps {
   isOpen: boolean;

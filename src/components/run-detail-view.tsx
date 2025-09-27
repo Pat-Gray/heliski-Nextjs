@@ -3,8 +3,8 @@
 import { useState, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { queryFn } from '@/lib/queryClient';
-import NZTopoMap from './nz-topo-map';
-import FullscreenImageViewer from './fullscreen-image-viewer';
+import NZTopoMap from './maps/nz-topo-map';
+import FullscreenImageViewer from './viewers/fullscreen-image-viewer';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
