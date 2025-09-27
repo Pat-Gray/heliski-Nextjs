@@ -11,14 +11,14 @@ import { Mountain, Plus, CheckCircle, MapPin, Image, Loader2 } from "lucide-reac
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryFn } from "@/lib/queryClient";
 import RunDetailView from "@/components/run-detail-view";
+import RunDetailSideModal from "@/components/run-detail-side-modal";
 import NZTopoMap from "@/components/nz-topo-map";
-import ImageModal from "@/components/image-modal";
 import DashboardFilters from "@/components/dashboard-filters";
 import { usePrint } from "@/components/print-provider";
 import type { Run, InsertDailyPlan, Area, SubArea } from "@/lib/schemas/schema";
 
 export default function Dashboard() {
-  const [selectedRunId, setSelectedRunId] = useState<string | null>(null);
+  const [selectedRunId] = useState<string | null>(null);
   const [focusStatusComment, setFocusStatusComment] = useState(false);
   const [selectedAreas, setSelectedAreas] = useState<Set<string>>(new Set());
   const [showAreaSelection, setShowAreaSelection] = useState(true);
@@ -30,8 +30,9 @@ export default function Dashboard() {
   const [selectedSubAreaForMap, setSelectedSubAreaForMap] = useState<string | null>(null);
   const [statusCommentInputs, setStatusCommentInputs] = useState<Record<string, string>>({});
   const updateTimeoutsRef = useRef<Record<string, NodeJS.Timeout>>({});
-  const [showImageModal, setShowImageModal] = useState(false);
-  const [selectedRunForImages, setSelectedRunForImages] = useState<Run | null>(null);
+  const [hoveredRunId, setHoveredRunId] = useState<string | null>(null);
+  const [showRunDetailModal, setShowRunDetailModal] = useState(false);
+  const [modalRunId, setModalRunId] = useState<string | null>(null);
 
   const { toast } = useToast();
   const queryClient = useQueryClient();
@@ -112,10 +113,13 @@ export default function Dashboard() {
     }
   };
 
-  const handleViewImages = (run: Run) => {
-    setSelectedRunForImages(run);
-    setShowImageModal(true);
+  const handleViewRunDetails = (run: Run) => {
+    setModalRunId(run.id);
+    setShowRunDetailModal(true);
   };
+
+
+  // Run click handler removed - GPX tracks are no longer clickable
 
   const handleStatusCommentChange = (runId: string, comment: string) => {
     setStatusCommentInputs(prev => ({ ...prev, [runId]: comment }));
@@ -653,13 +657,15 @@ export default function Dashboard() {
                                     {subAreaRuns.map(run => (
                                       <div 
                                         key={run.id} 
-                                        className={`p-3 border rounded-lg hover:bg-muted/50 transition-colors ${
+                                        className={`p-3 border rounded-lg transition-colors ${
                                           run.status === "open" 
-                                            ? "border-green-200 bg-green-50" 
+                                            ? "border-green-200 bg-green-50 hover:bg-green-100 hover:border-green-300" 
                                             : run.status === "conditional" 
-                                            ? "border-orange-200 bg-orange-50" 
-                                            : "border-red-200 bg-red-50"
+                                            ? "border-orange-200 bg-orange-50 hover:bg-orange-100 hover:border-orange-300" 
+                                            : "border-red-200 bg-red-50 hover:bg-red-100 hover:border-red-300"
                                         }`}
+                                        onMouseEnter={() => setHoveredRunId(run.id)}
+                                        onMouseLeave={() => setHoveredRunId(null)}
                                       >
                                         <div className="flex items-center justify-between mb-2">
                                           <div className="flex items-center space-x-3">
@@ -679,11 +685,11 @@ export default function Dashboard() {
                                             <Button
                                               size="sm"
                                               variant="outline"
-                                              onClick={() => handleViewImages(run)}
+                                              onClick={() => handleViewRunDetails(run)}
                                               className="text-xs hover:bg-blue-50 hover:text-blue-700 hover:border-blue-300"
                                             >
                                               <Image className="w-3 h-3 mr-1" />
-                                              Images
+                                              Details
                                             </Button>
                                           </div>
                                           <div className="flex items-center space-x-2">
@@ -767,11 +773,8 @@ export default function Dashboard() {
             <NZTopoMap
               areaId={selectedAreaForMap}
               subAreaId={selectedSubAreaForMap ?? undefined}
-              onRunSelect={(runId) => {
-                setSelectedRunId(runId);
-                setShowMap(false); // Switch back to run detail view
-              }}
               selectedRunId={selectedRunId ?? undefined}
+              hoveredRunId={hoveredRunId ?? undefined}
               onClose={() => {
                 setShowMap(false);
                 setSelectedAreaForMap(null);
@@ -889,14 +892,16 @@ export default function Dashboard() {
         </DialogContent>
       </Dialog>
 
-      {/* Image Modal */}
-      <ImageModal
-        isOpen={showImageModal}
+
+      {/* Run Detail Side Modal */}
+      <RunDetailSideModal
+        isOpen={showRunDetailModal}
         onClose={() => {
-          setShowImageModal(false);
-          setSelectedRunForImages(null);
+          setShowRunDetailModal(false);
+          setModalRunId(null);
         }}
-        run={selectedRunForImages}
+        runId={modalRunId}
+        focusStatusComment={focusStatusComment}
       />
     </div>
   );

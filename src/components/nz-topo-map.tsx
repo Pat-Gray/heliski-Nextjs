@@ -10,8 +10,8 @@ import type { Run } from '@/lib/schemas/schema';
 interface NZTopoMapProps {
   areaId: string;
   subAreaId?: string;
-  onRunSelect?: (runId: string) => void;
   selectedRunId?: string;
+  hoveredRunId?: string;
   onClose?: () => void;
 }
 
@@ -74,8 +74,8 @@ function calculateGPXBounds(runs: RunData[]) {
 export default function NZTopoMap({ 
   areaId, 
   subAreaId, 
-  onRunSelect, 
   selectedRunId,
+  hoveredRunId,
   onClose,
 }: NZTopoMapProps) {
   const mapRef = useRef<MapRef>(null);
@@ -87,7 +87,7 @@ export default function NZTopoMap({
     bearing: 0,
     pitch: 0
   });
-  const [highlightedRunId, setHighlightedRunId] = useState<string | null>(null);
+  const [highlightedRunId] = useState<string | null>(null);
   const [runs, setRuns] = useState<RunData[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -208,34 +208,9 @@ export default function NZTopoMap({
   // Filter runs with GPX data for rendering
   const runsWithData = runs.filter(run => run.gpxData);
 
-  // Handle map click events
-  const handleMapClick = useCallback((event: { features?: unknown[] }) => {
-    if (!mapRef.current) return;
+  // Map click events removed - GPX tracks are no longer clickable
 
-    const features = event.features;
-    if (features && features.length > 0) {
-      const feature = features[0] as { properties?: { runId?: string } };
-      const runId = feature.properties?.runId;
-      
-      if (runId && typeof runId === 'string') {
-        setHighlightedRunId(runId);
-        onRunSelect?.(runId);
-      }
-    }
-  }, [onRunSelect]);
-
-  // Handle mouse enter/leave for hover effects
-  const handleMouseEnter = useCallback(() => {
-    if (mapRef.current) {
-      mapRef.current.getCanvas().style.cursor = 'pointer';
-    }
-  }, []);
-
-  const handleMouseLeave = useCallback(() => {
-    if (mapRef.current) {
-      mapRef.current.getCanvas().style.cursor = '';
-    }
-  }, []);
+  // Mouse enter/leave handlers removed - GPX tracks are no longer interactive
 
   // Handle zoom controls
   const handleZoomIn = useCallback(() => {
@@ -322,7 +297,7 @@ export default function NZTopoMap({
       runs.forEach(run => {
         if (run.gpxData) {
           const layerId = `run-${run.id}-track`;
-          const isHighlighted = highlightedRunId === run.id || selectedRunId === run.id;
+          const isHighlighted = highlightedRunId === run.id || selectedRunId === run.id || hoveredRunId === run.id;
           
           try {
             if (map.getLayer(layerId)) {
@@ -342,7 +317,7 @@ export default function NZTopoMap({
     const rafId = requestAnimationFrame(updateMapStyles);
 
     return () => cancelAnimationFrame(rafId);
-  }, [runs, highlightedRunId, selectedRunId]);
+  }, [runs, highlightedRunId, selectedRunId, hoveredRunId]);
 
   // Handle map style load to ensure layers are available
   useEffect(() => {
@@ -355,7 +330,7 @@ export default function NZTopoMap({
         runsWithData.forEach(run => {
           if (run.gpxData) {
             const layerId = `run-${run.id}-track`;
-            const isHighlighted = highlightedRunId === run.id || selectedRunId === run.id;
+            const isHighlighted = highlightedRunId === run.id || selectedRunId === run.id || hoveredRunId === run.id;
             
             try {
               if (map.getLayer(layerId)) {
@@ -378,7 +353,7 @@ export default function NZTopoMap({
     return () => {
       map.off('style.load', handleStyleLoad);
     };
-  }, [runsWithData, highlightedRunId, selectedRunId]);
+  }, [runsWithData, highlightedRunId, selectedRunId, hoveredRunId]);
 
   // Check for Mapbox access token
   const mapboxToken = process.env.NEXT_PUBLIC_MAPBOX_ACCESS_TOKEN;
@@ -485,15 +460,11 @@ export default function NZTopoMap({
           ref={mapRef}
           {...viewState}
           onMove={handleMapMove}
-          onClick={handleMapClick}
-          onMouseEnter={handleMouseEnter}
-          onMouseLeave={handleMouseLeave}
           onError={handleMapError}
           onLoad={handleMapLoad}
           mapboxAccessToken={mapboxToken}
           style={{ width: '100%', height: '100%' }}
           mapStyle="mapbox://styles/mapbox/outdoors-v12"
-          interactiveLayerIds={runsWithData.map(run => `run-${run.id}-track`)}
         >
             {/* NZ Topo 50 Base Layer - Rendered First */}
             {useNZTopo && (
@@ -523,7 +494,7 @@ export default function NZTopoMap({
         {runsWithData.map(run => {
           if (!run.gpxData) return null;
 
-          const isHighlighted = highlightedRunId === run.id || selectedRunId === run.id;
+          const isHighlighted = highlightedRunId === run.id || selectedRunId === run.id || hoveredRunId === run.id;
           const layerId = `run-${run.id}-track`;
 
           return (

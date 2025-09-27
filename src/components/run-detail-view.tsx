@@ -3,8 +3,8 @@
 import { useState, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { queryFn } from '@/lib/queryClient';
-import ImageModal from './image-modal';
 import NZTopoMap from './nz-topo-map';
+import FullscreenImageViewer from './fullscreen-image-viewer';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -23,11 +23,12 @@ interface RunDetailViewProps {
 
 export default function RunDetailView({ runId }: RunDetailViewProps) {
   const [selectedRun, setSelectedRun] = useState<Run | null>(null);
-  const [showImageModal, setShowImageModal] = useState(false);
   const [showMap, setShowMap] = useState(false);
   const [editingField, setEditingField] = useState<'description' | 'notes' | null>(null);
   const [editDescription, setEditDescription] = useState('');
   const [editNotes, setEditNotes] = useState('');
+  const [showImageViewer, setShowImageViewer] = useState(false);
+  const [selectedImageIndex, setSelectedImageIndex] = useState(0);
   const queryClient = useQueryClient();
 
   // Fetch all runs and sub-areas to find the selected one
@@ -143,6 +144,26 @@ export default function RunDetailView({ runId }: RunDetailViewProps) {
   // Get sub-area name
   const getSubAreaName = (subAreaId: string) => {
     return subAreas.find((subArea: SubArea) => subArea.id === subAreaId)?.name || subAreaId;
+  };
+
+  // Get all images for the selected run
+  const getAllImages = (run: Run): string[] => {
+    const images: string[] = [];
+    if (run.runPhoto) images.push(run.runPhoto);
+    if (run.avalanchePhoto) images.push(run.avalanchePhoto);
+    if (run.additionalPhotos) images.push(...run.additionalPhotos);
+    return images;
+  };
+
+  // Handle image click
+  const handleImageClick = (imageUrl: string) => {
+    if (!selectedRun) return;
+    const images = getAllImages(selectedRun);
+    const index = images.indexOf(imageUrl);
+    if (index !== -1) {
+      setSelectedImageIndex(index);
+      setShowImageViewer(true);
+    }
   };
 
   return (
@@ -393,7 +414,15 @@ export default function RunDetailView({ runId }: RunDetailViewProps) {
                   <Button
                     variant="outline"
                     size="sm"
-                    onClick={() => setShowImageModal(true)}
+                    onClick={() => {
+                      if (selectedRun) {
+                        const images = getAllImages(selectedRun);
+                        if (images.length > 0) {
+                          setSelectedImageIndex(0);
+                          setShowImageViewer(true);
+                        }
+                      }
+                    }}
                     className="flex items-center gap-2"
                   >
                     <Eye className="h-4 w-4" />
@@ -464,7 +493,7 @@ export default function RunDetailView({ runId }: RunDetailViewProps) {
                             width={200}
                             height={96}
                             className="w-full h-full object-cover cursor-pointer hover:opacity-90"
-                            onClick={() => setShowImageModal(true)}
+                            onClick={() => selectedRun.runPhoto && handleImageClick(selectedRun.runPhoto)}
                           />
                         ) : (
                           <div className="w-full h-full bg-gray-100 flex items-center justify-center text-gray-400 text-xs">
@@ -533,7 +562,7 @@ export default function RunDetailView({ runId }: RunDetailViewProps) {
                             width={200}
                             height={96}
                             className="w-full h-full object-cover cursor-pointer hover:opacity-90"
-                            onClick={() => setShowImageModal(true)}
+                            onClick={() => selectedRun.avalanchePhoto && handleImageClick(selectedRun.avalanchePhoto)}
                           />
                         ) : (
                           <div className="w-full h-full bg-gray-100 flex items-center justify-center text-gray-400 text-xs">
@@ -605,7 +634,7 @@ export default function RunDetailView({ runId }: RunDetailViewProps) {
                             width={80}
                             height={64}
                             className="w-full h-full object-cover cursor-pointer hover:opacity-90"
-                            onClick={() => setShowImageModal(true)}
+                            onClick={() => handleImageClick(photo)}
                           />
                           <Button
                             variant="destructive"
@@ -646,12 +675,15 @@ export default function RunDetailView({ runId }: RunDetailViewProps) {
         )}
       </div>
 
-      {/* Image Modal */}
-      <ImageModal
-        isOpen={showImageModal}
-        onClose={() => setShowImageModal(false)}
-        run={selectedRun}
-      />
+      {/* Fullscreen Image Viewer */}
+      {selectedRun && (
+        <FullscreenImageViewer
+          images={getAllImages(selectedRun)}
+          initialIndex={selectedImageIndex}
+          isOpen={showImageViewer}
+          onClose={() => setShowImageViewer(false)}
+        />
+      )}
     </div>
   );
 }
