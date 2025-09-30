@@ -38,7 +38,7 @@ export default function SetupPage() {
 
     try {
       // Create the first super admin user
-      const { data, error } = await supabaseAdmin.auth.admin.createUser({
+      const { error } = await supabaseAdmin.auth.admin.createUser({
         email,
         password,
         user_metadata: { role: 'super_admin' },
@@ -53,7 +53,7 @@ export default function SetupPage() {
           router.push('/auth/login');
         }, 2000);
       }
-    } catch (err) {
+    } catch {
       setError('Failed to create super admin user. Please check your Supabase configuration.');
     }
     

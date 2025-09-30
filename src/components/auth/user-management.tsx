@@ -8,7 +8,7 @@ import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { useAuth } from '@/contexts/auth-context';
 import { supabase } from '@/lib/supabase';
-import { Users, Shield, User, Trash2, UserPlus } from 'lucide-react';
+import { Users, Shield, User, Trash2, UserPlus, AlertTriangle } from 'lucide-react';
 import CreateUserForm from './create-user-form';
 
 interface UserProfile {
@@ -46,11 +46,11 @@ export default function UserManagement() {
         email: user.email || '',
         role: (user.user_metadata?.role as 'super_admin' | 'user') || 'user',
         created_at: user.created_at,
-        last_sign_in_at: user.last_sign_in_at,
+        last_sign_in_at: user.last_sign_in_at || null,
       }));
 
       setUsers(userProfiles);
-    } catch (err) {
+    } catch {
       setError('Failed to fetch users');
     } finally {
       setLoading(false);
@@ -72,7 +72,7 @@ export default function UserManagement() {
       setUsers(prev => prev.map(user => 
         user.id === userId ? { ...user, role: newRole } : user
       ));
-    } catch (err) {
+    } catch {
       setError('Failed to update user role');
     }
   };
@@ -92,7 +92,7 @@ export default function UserManagement() {
 
       // Remove from local state
       setUsers(prev => prev.filter(user => user.id !== userId));
-    } catch (err) {
+    } catch {
       setError('Failed to delete user');
     }
   };

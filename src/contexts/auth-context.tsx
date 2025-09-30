@@ -97,7 +97,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
       return { error: { message: 'Insufficient permissions' } as AuthError };
     }
 
-    const { data, error } = await supabaseAdmin.auth.admin.createUser({
+    const { error } = await supabaseAdmin.auth.admin.createUser({
       email,
       password,
       user_metadata: { role },

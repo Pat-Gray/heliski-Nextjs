@@ -422,7 +422,7 @@ export default function Dashboard() {
     return () => window.removeEventListener('resize', handleResize);
   }, []);
   
-  const handleSubmitDailyPlan = async () => {
+  const _handleSubmitDailyPlan = async () => {
     if (filteredRuns.length === 0) {
       toast({ 
         title: "No runs available", 

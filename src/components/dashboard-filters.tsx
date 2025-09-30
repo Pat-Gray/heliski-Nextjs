@@ -23,8 +23,8 @@ interface AvalancheRiskAssessmentProps {
 export default function AvalancheRiskAssessment({ onApplyRiskAssessment }: AvalancheRiskAssessmentProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [strategicMindset, setStrategicMindset] = useState("Assessment");
-  const [primaryHazard, setPrimaryHazard] = useState("Wind Slab");
-  const [secondaryFactors, setSecondaryFactors] = useState({
+  const [primaryHazard] = useState("Wind Slab");
+  const [secondaryFactors] = useState({
     newSnow: false,
     windLoading: false,
     temperatureRise: false,

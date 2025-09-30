@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from 'react';
+import Image from 'next/image';
 import { Button } from '@/components/ui/button';
 import { X, ZoomIn, ZoomOut, RotateCcw, ChevronLeft, ChevronRight } from 'lucide-react';
 
@@ -196,9 +197,11 @@ export default function FullscreenImageViewer({
         )}
 
         {/* Image */}
-        <img
+        <Image
           src={images[selectedIndex]}
           alt={`Image ${selectedIndex + 1}`}
+          width={800}
+          height={600}
           className={`transition-transform duration-200 ${
             isDragging ? 'cursor-grabbing' : zoomLevel > 1 ? 'cursor-grab' : 'cursor-default'
           }`}

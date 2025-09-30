@@ -4,7 +4,7 @@ import type { NextRequest } from 'next/server';
 export async function middleware(req: NextRequest) {
   // Public routes that don't require authentication
   const publicRoutes = ['/auth/login', '/auth/signup', '/auth/reset-password', '/unauthorized', '/setup'];
-  const isPublicRoute = publicRoutes.some(route => req.nextUrl.pathname.startsWith(route));
+  const _isPublicRoute = publicRoutes.some(route => req.nextUrl.pathname.startsWith(route));
 
   // For now, let the client-side auth handle the protection
   // This middleware can be enhanced later with server-side auth checks

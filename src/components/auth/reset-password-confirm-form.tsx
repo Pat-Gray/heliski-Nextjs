@@ -19,7 +19,7 @@ export default function ResetPasswordConfirmForm() {
   const [isValidSession, setIsValidSession] = useState(false);
   
   const router = useRouter();
-  const searchParams = useSearchParams();
+  const _searchParams = useSearchParams();
 
   useEffect(() => {
     // Check if we have a valid session for password reset
@@ -34,7 +34,7 @@ export default function ResetPasswordConfirmForm() {
         const refreshToken = hashParams.get('refresh_token');
         
         if (accessToken && refreshToken) {
-          const { data, error } = await supabase.auth.setSession({
+          const { error } = await supabase.auth.setSession({
             access_token: accessToken,
             refresh_token: refreshToken,
           });
