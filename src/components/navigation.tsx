@@ -2,8 +2,12 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Button } from "@/components/ui/button";
-import { Calendar, Database, Mountain} from "lucide-react";
+import { Calendar, Database, Mountain } from "lucide-react";
+import {
+  SidebarMenu,
+  SidebarMenuButton,
+  SidebarMenuItem,
+} from "@/components/ui/sidebar";
 
 export default function Navigation() {
   const pathname = usePathname();
@@ -15,30 +19,22 @@ export default function Navigation() {
   ];
 
   return (
-    <nav className="flex flex-col space-y-2 p-3 lg:p-4">
-      <div className="space-y-1">
-        {navItems.map((item) => {
-          const Icon = item.icon;
-          const isActive = pathname === item.path;
-          
-          return (
-            <Link key={item.path} href={item.path}>
-              <Button
-                variant={isActive ? "default" : "ghost"}
-                className={`w-full justify-start text-sm lg:text-base ${
-                  isActive 
-                    ? "bg-primary text-primary-foreground" 
-                    : "text-muted-foreground hover:bg-accent hover:text-accent-foreground"
-                }`}
-                data-testid={`nav-${item.label.toLowerCase().replace(" ", "-")}`}
-              >
-                <Icon className="w-4 h-4 lg:w-5 lg:h-5 mr-2 lg:mr-3" />
-                <span className="font-medium truncate">{item.label}</span>
-              </Button>
-            </Link>
-          );
-        })}
-      </div>
-    </nav>
+    <SidebarMenu>
+      {navItems.map((item) => {
+        const Icon = item.icon;
+        const isActive = pathname === item.path;
+        
+        return (
+          <SidebarMenuItem key={item.path}>
+            <SidebarMenuButton asChild isActive={isActive}>
+              <Link href={item.path}>
+                <Icon className="h-4 w-4" />
+                <span>{item.label}</span>
+              </Link>
+            </SidebarMenuButton>
+          </SidebarMenuItem>
+        );
+      })}
+    </SidebarMenu>
   );
 }

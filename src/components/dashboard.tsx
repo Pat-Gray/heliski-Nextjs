@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
-import { Mountain, Plus, CheckCircle, MapPin, Image, Loader2, Printer } from "lucide-react";
+import { Mountain,CheckCircle, MapPin, GripVertical } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryFn } from "@/lib/queryClient";
 import RunDetailView from "@/components/run-detail-view";
@@ -16,6 +16,7 @@ import NZTopoMap from "@/components/maps/nz-topo-map";
 import DashboardFilters from "@/components/dashboard-filters";
 import { usePrint } from "@/components/print-provider";
 import type { Run, InsertDailyPlan, Area, SubArea } from "@/lib/schemas/schema";
+import { Loader2 } from "lucide-react";
 
 export default function Dashboard() {
   const [selectedRunId] = useState<string | null>(null);
@@ -33,6 +34,10 @@ export default function Dashboard() {
   const [hoveredRunId, setHoveredRunId] = useState<string | null>(null);
   const [showRunDetailModal, setShowRunDetailModal] = useState(false);
   const [modalRunId, setModalRunId] = useState<string | null>(null);
+  const [leftPanelWidth, setLeftPanelWidth] = useState(33.33); // Percentage
+  const [isResizing, setIsResizing] = useState(false);
+  const [isLargeScreen, setIsLargeScreen] = useState(false);
+  const resizeRef = useRef<HTMLDivElement>(null);
 
   const { toast } = useToast();
   const queryClient = useQueryClient();
@@ -54,6 +59,37 @@ export default function Dashboard() {
       Object.values(updateTimeoutsRef.current).forEach(timeout => clearTimeout(timeout));
     };
   }, []);
+
+  // Handle resize functionality
+  useEffect(() => {
+    const handleMouseMove = (e: MouseEvent) => {
+      if (!isResizing) return;
+      
+      const container = resizeRef.current?.parentElement;
+      if (!container) return;
+      
+      const containerRect = container.getBoundingClientRect();
+      const newLeftWidth = ((e.clientX - containerRect.left) / containerRect.width) * 100;
+      
+      // Constrain between 20% and 80%
+      const constrainedWidth = Math.min(Math.max(newLeftWidth, 20), 80);
+      setLeftPanelWidth(constrainedWidth);
+    };
+
+    const handleMouseUp = () => {
+      setIsResizing(false);
+    };
+
+    if (isResizing) {
+      document.addEventListener('mousemove', handleMouseMove);
+      document.addEventListener('mouseup', handleMouseUp);
+    }
+
+    return () => {
+      document.removeEventListener('mousemove', handleMouseMove);
+      document.removeEventListener('mouseup', handleMouseUp);
+    };
+  }, [isResizing]);
 
   // Clear timeouts when selected areas change
   useEffect(() => {
@@ -99,6 +135,10 @@ export default function Dashboard() {
       setShowMap(true);
     }
     setSelectedAreas(newSelected);
+    
+    // Emit area selection change to header
+    const event = new CustomEvent('area-selection-changed', { detail: newSelected });
+    window.dispatchEvent(event);
   };
 
  
@@ -370,6 +410,17 @@ export default function Dashboard() {
       day: 'numeric' 
     }));
   }, []);
+
+  // Handle screen size changes
+  useEffect(() => {
+    const handleResize = () => {
+      setIsLargeScreen(window.innerWidth >= 1024);
+    };
+    
+    handleResize(); // Set initial value
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
   
   const handleSubmitDailyPlan = async () => {
     if (filteredRuns.length === 0) {
@@ -493,60 +544,16 @@ export default function Dashboard() {
   }
 
   return (
-    <div className="h-full flex flex-col">
-      {/* Top Header */}
-      <header className="no-print bg-card border-b border-border px-4 lg:px-6 py-4 flex-shrink-0">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-          <div className="flex items-center space-x-4">
-            <div>
-              <h2 className="text-xl lg:text-2xl font-bold text-foreground">Run Management</h2>
-              <p className="text-sm lg:text-base text-muted-foreground">Today: <span data-testid="text-current-date">{currentDate || 'Loading...'}</span></p>
-            </div>
-          </div>
-          <div className="flex flex-col sm:flex-row items-stretch sm:items-center space-y-2 sm:space-y-0 sm:space-x-4">
-            <Button 
-              onClick={handleSubmitDailyPlan}
-              disabled={submitDailyPlanMutation.isPending}
-              data-testid="button-submit-daily-plan"
-            >
-              <Plus className="w-4 h-4 mr-2" />
-              {submitDailyPlanMutation.isPending ? "Submitting..." : "Submit Daily Plan"}
-            </Button>
-            <Button 
-              onClick={() => {
-                console.log('🖨️ Manual print test...');
-                setPrintData({
-                  areas,
-                  subAreas,
-                  filteredRuns,
-                  selectedAreas,
-                  currentDate: currentDate || new Date().toLocaleDateString('en-US', { 
-                    year: 'numeric', 
-                    month: 'long', 
-                    day: 'numeric' 
-                  }),
-                  greenCount,
-                  orangeCount,
-                  redCount,
-                });
-                setTimeout(() => triggerPrint(), 100);
-              }}
-              variant="outline"
-              className="ml-2"
-            >
-       <Printer className="h-4 w-4" />
-       <span>Print Plan</span>
-            </Button>
-            
-          </div>
-        </div>
-      </header>
-
-      {/* Content Area */}
-      <main className="flex-1 flex flex-col lg:flex-row min-h-0">
+    <div className={`h-full flex flex-col ${isResizing ? 'select-none' : ''}`}>
+      {/* Content Area - Fixed height with scrolling */}
+      <main className="flex-1 flex flex-col lg:flex-row min-h-0 overflow-hidden" ref={resizeRef}>
         {/* Runs List */}
-        <div className="w-full lg:w-1/2 border-r-0 lg:border-r border-b lg:border-b-0 border-border overflow-y-auto">
-          <div className="p-4 lg:p-6">
+        <div 
+          className="w-full lg:border-r border-b lg:border-b-0 border-border flex flex-col min-h-0"
+          style={{ width: isLargeScreen ? `${leftPanelWidth}%` : '100%' }}
+        >
+          <div className="flex-1 overflow-y-auto">
+            <div className="p-4 lg:p-6">
             {/* Area Selection */}
             <div className="mb-6">
               <div className="flex items-center justify-between mb-3">
@@ -559,7 +566,6 @@ export default function Dashboard() {
                     <Mountain className="w-4 h-4 mr-2" />
                     {showAreaSelection ? "Hide Areas" : "Show Areas"}
                   </Button>
-                  
                   {selectedAreas.size > 0 && (
                     <DashboardFilters onApplyRiskAssessment={handleAvalancheRiskAssessment} />
                   )}
@@ -642,7 +648,7 @@ export default function Dashboard() {
                               return (
                                 <div key={subArea.id} className="space-y-2">
                                   <div className="flex items-center justify-between">
-                                    <h4 className="font-medium text-sm text-muted-foreground flex items-center">
+                                    <h4 className="font-medium text-base  flex items-center">
                                       <MapPin className="w-4 h-4 mr-1" />
                                       {subArea.name}
                                     </h4>
@@ -660,13 +666,14 @@ export default function Dashboard() {
                                     {subAreaRuns.map(run => (
                                       <div 
                                         key={run.id} 
-                                        className={`p-3 border rounded-lg transition-colors ${
+                                        className={`p-3 border rounded-lg transition-colors cursor-pointer ${
                                           run.status === "open" 
                                             ? "border-green-200 bg-green-50 hover:bg-green-100 hover:border-green-300" 
                                             : run.status === "conditional" 
                                             ? "border-orange-200 bg-orange-50 hover:bg-orange-100 hover:border-orange-300" 
                                             : "border-red-200 bg-red-50 hover:bg-red-100 hover:border-red-300"
                                         }`}
+                                        onClick={() => handleViewRunDetails(run)}
                                         onMouseEnter={() => setHoveredRunId(run.id)}
                                         onMouseLeave={() => setHoveredRunId(null)}
                                       >
@@ -680,65 +687,62 @@ export default function Dashboard() {
                                                 : "bg-red-500"
                                             }`} />
                                             <div className="min-w-0 flex-1">
-                                              <div className="font-medium truncate">#{run.runNumber} {run.name}</div>
+                                              <div className="font-medium truncate">#{run.runNumber} - {run.name}</div>
                                               <div className="text-sm text-muted-foreground truncate">
-                                                {run.aspect} • {run.averageAngle} • {run.elevationMax}-{run.elevationMin}m
+                                                {run.aspect} • {run.elevationMax}-{run.elevationMin}m
                                               </div>
                                             </div>
-                                            <Button
-                                              size="sm"
-                                              variant="outline"
-                                              onClick={() => handleViewRunDetails(run)}
-                                              className="text-xs hover:bg-blue-50 hover:text-blue-700 hover:border-blue-300 flex-shrink-0"
-                                            >
-                                              <Image className="w-3 h-3 mr-1" />
-                                              <span className="hidden sm:inline">Details</span>
-                                            </Button>
                                           </div>
                                           <div className="flex items-center space-x-1 sm:space-x-2 flex-wrap">
                                             <Button
                                               size="sm"
                                               variant={run.status === "open" ? "default" : "outline"}
-                                              onClick={() => handleRunStatusChange(run.id, "open")}
-                                              className={`text-xs ${
+                                              onClick={(e) => {
+                                                e.stopPropagation();
+                                                handleRunStatusChange(run.id, "open");
+                                              }}
+                                              className={`w-12 ${
                                                 run.status === "open" 
-                                                  ? "bg-green-500 hover:bg-green-600 text-white" 
-                                                  : "hover:bg-green-50 hover:text-green-700 hover:border-green-300"
+                                                  ? "bg-green-500 hover:bg-green-600 " 
+                                                  : "hover:bg-green-100 hover:text-green-700 hover:border-green-300"
                                               }`}
                                             >
-                                              <span className="hidden sm:inline">Open</span>
-                                              <span className="sm:hidden">O</span>
+                                             
                                             </Button>
                                             <Button
                                               size="sm"
                                               variant={run.status === "conditional" ? "default" : "outline"}
-                                              onClick={() => handleRunStatusChange(run.id, "conditional")}
-                                              className={`text-xs ${
+                                              onClick={(e) => {
+                                                e.stopPropagation();
+                                                handleRunStatusChange(run.id, "conditional");
+                                              }}
+                                              className={`w-12 ${
                                                 run.status === "conditional" 
-                                                  ? "bg-orange-500 hover:bg-orange-600 text-white" 
-                                                  : "hover:bg-orange-50 hover:text-orange-700 hover:border-orange-300"
+                                                  ? "bg-orange-500 hover:bg-orange-600 " 
+                                                  : "hover:bg-orange-100 hover:text-orange-700 hover:border-orange-300"
                                               }`}
                                             >
-                                              <span className="hidden sm:inline">Conditional</span>
-                                              <span className="sm:hidden">C</span>
+                                              
                                             </Button>
                                             <Button
                                               size="sm"
                                               variant={run.status === "closed" ? "default" : "outline"}
-                                              onClick={() => handleRunStatusChange(run.id, "closed")}
-                                              className={`text-xs ${
+                                              onClick={(e) => {
+                                                e.stopPropagation();
+                                                handleRunStatusChange(run.id, "closed");
+                                              }}
+                                              className={`w-12 ${
                                                 run.status === "closed" 
-                                                  ? "bg-red-500 hover:bg-red-600 text-white" 
-                                                  : "hover:bg-red-50 hover:text-red-700 hover:border-red-300"
+                                                  ? "bg-red-500 hover:bg-red-600 " 
+                                                  : "hover:bg-red-100 hover:text-red-700 hover:border-red-300"
                                               }`}
                                             >
-                                              <span className="hidden sm:inline">Closed</span>
-                                              <span className="sm:hidden">X</span>
+                                             
                                             </Button>
                                           </div>
                                         </div>
                                         {run.status === "conditional" && (
-                                          <div className="mt-2">
+                                          <div className="mt-2" onClick={(e) => e.stopPropagation()}>
                                             <Input
                                               data-run-id={run.id}
                                               placeholder="Enter status comment..."
@@ -770,15 +774,29 @@ export default function Dashboard() {
                   })
               )}
             </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Resize Handle */}
+        <div 
+          className="hidden lg:flex w-1 bg-border hover:bg-primary/20 cursor-col-resize items-center justify-center group transition-colors"
+          onMouseDown={() => setIsResizing(true)}
+        >
+          <div className="w-0.5 h-8 bg-muted-foreground/30 group-hover:bg-muted-foreground/60 rounded-full flex items-center justify-center">
+            <GripVertical className="w-3 h-3 text-muted-foreground/60 group-hover:text-muted-foreground" />
           </div>
         </div>
 
         {/* Map or Run Detail View */}
-        <div className="w-full lg:w-1/2 overflow-y-auto">
+        <div 
+          className="flex flex-col min-h-0 flex-1"
+          style={{ width: isLargeScreen ? `${100 - leftPanelWidth}%` : '100%' }}
+        >
           {showMap && selectedAreaForMap ? (
             <>
               {/* Map - Only visible on xl screens and up (1280px+) */}
-              <div className="hidden xl:block h-full">
+              <div className="hidden xl:block h-full w-full flex-1">
                 <NZTopoMap
                   areaId={selectedAreaForMap}
                   subAreaId={selectedSubAreaForMap ?? undefined}
@@ -792,7 +810,7 @@ export default function Dashboard() {
                 />
               </div>
               {/* Run Detail View - Visible on screens below xl (below 1280px) */}
-              <div className="xl:hidden h-full">
+              <div className="xl:hidden h-full w-full overflow-y-auto flex-1">
                 <RunDetailView 
                   runId={selectedRunId} 
                   focusStatusComment={focusStatusComment}
@@ -801,7 +819,7 @@ export default function Dashboard() {
             </>
           ) : (
             /* Run Detail View - Always visible when map is not shown */
-            <div className="h-full">
+            <div className="h-full w-full overflow-y-auto flex-1">
               <RunDetailView 
                 runId={selectedRunId} 
                 focusStatusComment={focusStatusComment}

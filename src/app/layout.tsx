@@ -3,6 +3,7 @@ import "./globals.css";
 import "mapbox-gl/dist/mapbox-gl.css";
 import { QueryProvider } from "@/components/query-provider";
 import { PrintProvider } from "@/components/print-provider";
+import { AuthProvider } from "@/contexts/auth-context";
 import { AppLayout } from "../components/app-layout";
 
 export const metadata: Metadata = {
@@ -18,13 +19,15 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body className="min-h-screen bg-background font-sans antialiased" suppressHydrationWarning>
-        <QueryProvider>
-          <PrintProvider>
-            <AppLayout>
-              {children}
-            </AppLayout>
-          </PrintProvider>
-        </QueryProvider>
+        <AuthProvider>
+          <QueryProvider>
+            <PrintProvider>
+              <AppLayout>
+                {children}
+              </AppLayout>
+            </PrintProvider>
+          </QueryProvider>
+        </AuthProvider>
       </body>
     </html>
   );

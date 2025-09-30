@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import ProtectedRoute from "@/components/auth/protected-route";
 import { useQuery } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -141,7 +142,8 @@ export default function DailyPlans() {
   };
 
   return (
-    <div className="flex h-screen bg-background">
+    <ProtectedRoute>
+      <div className="flex h-screen bg-background">
       {/* Sidebar */}
       <div className="w-80 bg-card border-r border-border flex flex-col">
         <div className="p-6 border-b border-border">
@@ -320,5 +322,6 @@ export default function DailyPlans() {
         </main>
       </div>
     </div>
+    </ProtectedRoute>
   );
 }

@@ -18,8 +18,8 @@ export default function QuickStats({
   closedRuns,
 }: QuickStatsProps) {
   return (
-    <div className="p-4 border-t border-border">
-      <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide mb-3">
+    <div className="p-2">
+      <h3 className="text-sm font-semibold text-sidebar-foreground/70 uppercase tracking-wide mb-3">
         Quick Stats
       </h3>
       <div className="space-y-2">

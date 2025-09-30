@@ -1,6 +1,7 @@
 "use client";
 
 import { useState} from "react";
+import ProtectedRoute from "@/components/auth/protected-route";
 import { useQuery } from "@tanstack/react-query";
 import { Card, CardContent} from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -129,7 +130,8 @@ export default function RunDataManagement() {
 
 
   return (
-    <div className="h-full flex flex-col">
+    <ProtectedRoute>
+      <div className="h-full flex flex-col">
       {/* Header */}
       <header className="bg-card border-b border-border px-4 lg:px-6 py-4 flex-shrink-0">
         <h2 className="text-xl lg:text-2xl font-bold text-foreground">Run Data Management</h2>
@@ -325,5 +327,6 @@ export default function RunDataManagement() {
       </div>
 
     </div>
+    </ProtectedRoute>
   );
 }

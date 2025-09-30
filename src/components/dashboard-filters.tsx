@@ -4,7 +4,6 @@ import { useState } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Checkbox } from "@/components/ui/checkbox";
 import { AlertTriangle, Settings, Zap } from "lucide-react";
 
 interface AvalancheRiskAssessmentProps {
@@ -47,14 +46,14 @@ export default function AvalancheRiskAssessment({ onApplyRiskAssessment }: Avala
       <DialogTrigger asChild>
         <Button variant="outline" size="sm" className="flex items-center gap-2">
           <AlertTriangle className="w-4 h-4" />
-          Apply Daily Risk Factors
+          Apply Daily Mindset
         </Button>
       </DialogTrigger>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Settings className="w-5 h-5" />
-            Apply Daily Risk Factors
+            Apply Daily Mindset
           </DialogTitle>
         </DialogHeader>
         
@@ -80,7 +79,7 @@ export default function AvalancheRiskAssessment({ onApplyRiskAssessment }: Avala
             
           </div>
 
-          {/* Primary Hazard Assessment */}
+          {/* Primary Hazard Assessment
           <div className="space-y-3">
             <label className="text-sm font-medium text-foreground">Primary Hazard Type</label>
             <Select value={primaryHazard} onValueChange={setPrimaryHazard}>
@@ -96,10 +95,10 @@ export default function AvalancheRiskAssessment({ onApplyRiskAssessment }: Avala
                 <SelectItem value="Glide Avalanche">Glide Avalanche</SelectItem>
               </SelectContent>
             </Select>
-          </div>
+          </div> */}
 
           {/* Secondary Factors */}
-          <div className="space-y-3">
+          {/* <div className="space-y-3">
             <label className="text-sm font-medium text-foreground">Secondary Factors</label>
             <div className="space-y-3">
               <div className="flex items-center space-x-2">
@@ -135,10 +134,10 @@ export default function AvalancheRiskAssessment({ onApplyRiskAssessment }: Avala
                 <label htmlFor="temperatureRise" className="text-sm">Temperature Rise</label>
               </div>
             </div>
-          </div>
+          </div> */}
 
 {/* Wind Direction */}
-<div className="space-y-3">
+{/* <div className="space-y-3">
   <label className="text-sm font-medium text-foreground">Wind Direction</label>
   <Select 
     value={secondaryFactors.windDirection} 
@@ -160,10 +159,10 @@ export default function AvalancheRiskAssessment({ onApplyRiskAssessment }: Avala
       <SelectItem value="NW">Northwest (NW)</SelectItem>
     </SelectContent>
   </Select>
-</div>
+</div> */}
 
           {/* Wind Speed */}
-          <div className="space-y-3">
+          {/* <div className="space-y-3">
             <label className="text-sm font-medium text-foreground">Wind Speed</label>
             <Select 
               value={secondaryFactors.windSpeed} 
@@ -182,7 +181,7 @@ export default function AvalancheRiskAssessment({ onApplyRiskAssessment }: Avala
                 <SelectItem value="very-strong">Very Strong (60+ km/h)</SelectItem>
               </SelectContent>
             </Select>
-          </div>
+          </div> */}
 
 
           
