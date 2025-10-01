@@ -74,7 +74,7 @@ export function AppLayout({ children }: AppLayoutProps) {
   }, []);
 
   // Determine if this is a page that needs the full layout
-  const needsFullLayout = pathname === "/" || pathname === "/run-data";
+  const needsFullLayout = pathname === "/" || pathname === "/run-data" || pathname === "/daily-plans";
 
   if (!needsFullLayout) {
     // For pages that don't need the sidebar layout, just render children
@@ -143,12 +143,12 @@ export function AppLayout({ children }: AppLayoutProps) {
             <SidebarGroup>
               <SidebarGroupLabel>Admin</SidebarGroupLabel>
               <SidebarGroupContent>
-                <Button variant="ghost" className="w-full justify-start" asChild>
+                {/* <Button variant="ghost" className="w-full justify-start" asChild>
                   <a href="/admin/users">
-                    <Shield className="h-4 w-4 mr-2" />
+                    <Shield className="h-4 w-4 mr-2 text-sm" />
                     User Management
                   </a>
-                </Button>
+                </Button> */}
               </SidebarGroupContent>
             </SidebarGroup>
           )}
@@ -214,7 +214,9 @@ export function AppLayout({ children }: AppLayoutProps) {
                  pathname === "/run-data" ? "Run Data Management" :
                  pathname === "/daily-plans" ? "Daily Plans" :
                  pathname === "/admin/users" ? "User Management" :
-                 "Heli-Ski Operations"}
+                 "Heli-Ski Operations"
+                 
+                 }
               </h1>
               {pathname === "/" && (
                 <p className="text-sm text-muted-foreground">

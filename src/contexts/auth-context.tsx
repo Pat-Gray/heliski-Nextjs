@@ -19,6 +19,7 @@ interface AuthContextType {
   signOut: () => Promise<{ error: AuthError | null }>;
   createUser: (email: string, password: string, role: UserRole) => Promise<{ error: AuthError | null }>;
   resetPassword: (email: string) => Promise<{ error: AuthError | null }>;
+  updateUserRole: (newRole: UserRole) => Promise<{ error: AuthError | null }>;
   isSuperAdmin: boolean;
   isAuthenticated: boolean;
 }
@@ -47,7 +48,15 @@ export function AuthProvider({ children }: AuthProviderProps) {
     const getInitialSession = async () => {
       const { data: { session } } = await supabase.auth.getSession();
       setSession(session);
-      setUser(session?.user as AuthUser || null);
+      if (session?.user) {
+        const userWithRole = {
+          ...session.user,
+          role: session.user.user_metadata?.role as UserRole || 'user'
+        } as AuthUser;
+        setUser(userWithRole);
+      } else {
+        setUser(null);
+      }
       setLoading(false);
     };
 
@@ -57,7 +66,15 @@ export function AuthProvider({ children }: AuthProviderProps) {
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       async (event, session) => {
         setSession(session);
-        setUser(session?.user as AuthUser || null);
+        if (session?.user) {
+          const userWithRole = {
+            ...session.user,
+            role: session.user.user_metadata?.role as UserRole || 'user'
+          } as AuthUser;
+          setUser(userWithRole);
+        } else {
+          setUser(null);
+        }
         setLoading(false);
       }
     );
@@ -66,10 +83,19 @@ export function AuthProvider({ children }: AuthProviderProps) {
   }, []);
 
   const signIn = async (email: string, password: string) => {
-    const { error } = await supabase.auth.signInWithPassword({
+    const { data, error } = await supabase.auth.signInWithPassword({
       email,
       password,
     });
+    
+    if (data.user) {
+      const userWithRole = {
+        ...data.user,
+        role: data.user.user_metadata?.role as UserRole || 'user'
+      } as AuthUser;
+      setUser(userWithRole);
+    }
+    
     return { error };
   };
 
@@ -79,6 +105,9 @@ export function AuthProvider({ children }: AuthProviderProps) {
       password,
       options: {
         data: {
+          role,
+        },
+        user_metadata: {
           role,
         },
       },
@@ -114,8 +143,45 @@ export function AuthProvider({ children }: AuthProviderProps) {
     return { error };
   };
 
-  const isSuperAdmin = user?.role === 'super_admin';
+  const updateUserRole = async (newRole: UserRole) => {
+    if (!user) return { error: { message: 'No user logged in' } as AuthError };
+    
+    const { error } = await supabase.auth.updateUser({
+      data: { role: newRole },
+      user_metadata: { role: newRole }
+    });
+    
+    if (!error && user) {
+      const updatedUser = {
+        ...user,
+        role: newRole,
+        user_metadata: { ...user.user_metadata, role: newRole }
+      } as AuthUser;
+      setUser(updatedUser);
+    }
+    
+    return { error };
+  };
+
+  // Extract role from user metadata or direct role property
+  const getUserRole = (user: any): UserRole => {
+    if (!user) return 'user';
+    return user.role || user.user_metadata?.role || 'user';
+  };
+
+  const isSuperAdmin = getUserRole(user) === 'super_admin';
   const isAuthenticated = !!user;
+
+  // Debug logging (disabled during build)
+  if (typeof window !== 'undefined' && process.env.NODE_ENV === 'development') {
+    console.log('Auth Debug:', {
+      user,
+      role: getUserRole(user),
+      user_metadata: user?.user_metadata,
+      isSuperAdmin,
+      isAuthenticated
+    });
+  }
 
   const value = {
     user,
@@ -126,6 +192,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
     signOut,
     createUser,
     resetPassword,
+    updateUserRole,
     isSuperAdmin,
     isAuthenticated,
   };

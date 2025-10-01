@@ -118,28 +118,19 @@ export default function RunDataManagement() {
     }
   };
 
-  const getAngleLabel = (angle: string) => {
-    switch (angle) {
-      case 'gentle': return 'Gentle (≤25°)';
-      case 'moderate': return 'Moderate (26-35°)';
-      case 'steep': return 'Steep (36-45°)';
-      case 'very_steep': return 'Very Steep (>45°)';
-      default: return angle;
-    }
-  };
 
 
   return (
     <ProtectedRoute>
       <div className="h-full flex flex-col">
       {/* Header */}
-      <header className="bg-card border-b border-border px-4 lg:px-6 py-4 flex-shrink-0">
+      {/* <header className="bg-card border-b border-border px-4 lg:px-6 py-4 flex-shrink-0">
         <h2 className="text-xl lg:text-2xl font-bold text-foreground">Run Data Management</h2>
         <p className="text-sm lg:text-base text-muted-foreground">Manage areas, sub-areas, and ski runs</p>
-      </header>
+      </header> */}
 
       {/* Navigation Breadcrumb */}
-      {navigationStack.length > 0 && (
+      
         <div className="bg-card border-b border-border px-4 lg:px-6 py-3 flex-shrink-0">
           <div className="flex items-center space-x-2 overflow-x-auto">
             <Button variant="ghost" size="sm" onClick={resetNavigation}>
@@ -174,11 +165,11 @@ export default function RunDataManagement() {
             ))}
           </div>
         </div>
-      )}
+      
 
       {/* Search */}
-      <div className="p-4 lg:p-6 pb-0 flex-shrink-0">
-        <div className="relative max-w-md">
+      {/* <div className="p-4 lg:p-6 pb-0 flex-shrink-0">
+        <div className="relative max-w-sm">
           <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground w-4 h-4" />
           <input
             type="text"
@@ -188,13 +179,24 @@ export default function RunDataManagement() {
             className="w-full pl-10 pr-4 py-2 border border-input rounded-md bg-background"
           />
         </div>
-      </div>
+      </div> */}
 
       {/* Main Content */}
       <div className="flex-1 flex flex-col lg:flex-row min-h-0">
         {/* Left Panel */}
         <div className="w-full lg:w-1/3 border-r-0 lg:border-r border-b lg:border-b-0 border-border overflow-y-auto">
+        <div className="relative max-w-sm m-4">
+          <Search className="absolute left-2 top-1/2 transform -translate-y-1/2 text-muted-foreground w-4 h-4" />
+          <input
+            type="text"
+            placeholder="Search areas, sub-areas, or runs..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="w-full pl-10 pr-4 py-2 border border-input rounded-md bg-background"
+          />
+        </div>
           <div className="p-4 lg:p-6">
+            
             {/* Areas */}
             {!selectedArea && !selectedSubArea && (
               <div>
@@ -282,7 +284,7 @@ export default function RunDataManagement() {
                             <div>
                               <h4 className="font-medium">#{run.runNumber} {run.name}</h4>
                               <p className="text-sm text-muted-foreground">
-                                {run.aspect} • {getAngleLabel(run.averageAngle)} • {run.elevationMax}-{run.elevationMin}m
+                                {run.aspect} • {run.elevationMax}-{run.elevationMin}m
                               </p>
                             </div>
                           </div>

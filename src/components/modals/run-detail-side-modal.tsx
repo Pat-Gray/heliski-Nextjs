@@ -37,22 +37,15 @@ export default function RunDetailSideModal({
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="max-w-4xl max-h-[90vh] w-full h-full p-0 overflow-hidden mx-4 sm:mx-0">
-        <div className="flex flex-col h-full">
-          {/* Header */}
-          <div className="flex items-center justify-between p-3 sm:p-4 border-b bg-white flex-shrink-0">
-            <h2 className="text-base sm:text-lg font-semibold">Run Details</h2>
-           
-          </div>
+      <DialogContent className="max-w-7xl max-h-[90vh] w-full h-full p-1 overflow-hidden mx-4 sm:mx-0">
+        
           
-          {/* Content */}
-          <div className="flex-1 overflow-hidden">
             <RunDetailView 
               runId={runId} 
               focusStatusComment={focusStatusComment}
             />
-          </div>
-        </div>
+          
+        
       </DialogContent>
 
     </Dialog>

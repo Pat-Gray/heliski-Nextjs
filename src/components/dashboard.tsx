@@ -588,7 +588,7 @@ export default function Dashboard() {
                       <CardContent className="p-4">
                         <div className="flex items-center justify-between">
                           <div className="flex items-center space-x-3">
-                            <Mountain className="w-5 h-5 text-primary" />
+                            
                             <div>
                               <h4 className="font-medium">{area.name}</h4>
                               <p className="text-sm text-muted-foreground">

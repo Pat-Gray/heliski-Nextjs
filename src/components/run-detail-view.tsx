@@ -168,10 +168,41 @@ export default function RunDetailView({ runId }: RunDetailViewProps) {
 
   return (
     <div className="h-full flex flex-col">
-      {/* Header */}
+      
       <div className="p-4 border-b bg-white">
-        <div className="flex items-center justify-between mb-3">
-          <div className="flex items-center gap-2">
+       
+      
+        {/* Run Title and Status */}
+        <div className="flex flex-col sm:flex-row sm:items-center mb-3 gap-2">
+          <div className="flex flex-wrap items-center gap-2 sm:gap-3">
+            <h2 className="text-lg sm:text-xl font-bold truncate">{selectedRun.name}</h2>
+            <span className="text-sm text-muted-foreground">#{selectedRun.runNumber}</span>
+            <Badge className={getStatusColor(selectedRun.status)}>
+              {capitalizeFirstLetter(selectedRun.status)}
+            </Badge>
+            <div className="flex flex-wrap items-center gap-2 sm:gap-3"><div>
+            <span className="text-muted-foreground text-sm font-medium ">Sub-Area:</span>
+            <span className="ml-1 font-medium text-sm">{getSubAreaName(selectedRun.subAreaId || '') || 'N/A'}</span>
+          </div>
+          <div>
+            <span className="text-muted-foreground text-sm font-medium">Aspect:</span>
+            <span className="ml-1 font-medium text-sm">{selectedRun.aspect || 'N/A'}</span>
+          </div>
+          
+          <div>
+            <span className="text-muted-foreground text-sm font-medium">Elevation:</span>
+            <span className="ml-1 font-medium text-sm">
+              {selectedRun.elevationMin && selectedRun.elevationMax 
+                ? `${selectedRun.elevationMin}m - ${selectedRun.elevationMax}m`
+                : 'N/A'
+              }
+            </span>
+          </div>
+          <div className="ml-auto flex items-center gap-2">
+            <GpxUpdateButton 
+              runId={selectedRun.id} 
+              currentGpxPath={selectedRun.gpxPath}
+            />
             {selectedRun.gpxPath ? (
               <Button
                 variant="outline"
@@ -229,48 +260,10 @@ export default function RunDetailView({ runId }: RunDetailViewProps) {
               </Button>
             )}
           </div>
+        </div>
       </div>
-      
-        {/* Run Title and Status */}
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-3 gap-2">
-          <div className="flex flex-wrap items-center gap-2 sm:gap-3">
-            <h2 className="text-lg sm:text-xl font-bold truncate">{selectedRun.name}</h2>
-            <span className="text-sm text-muted-foreground">#{selectedRun.runNumber}</span>
-            <Badge className={getStatusColor(selectedRun.status)}>
-              {capitalizeFirstLetter(selectedRun.status)}
-            </Badge>
-          </div>
-        </div>
-
-        {/* Run Information Grid */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-2 text-sm">
-          <div>
-            <span className="text-muted-foreground">Sub-Area:</span>
-            <span className="ml-1 font-medium">{getSubAreaName(selectedRun.subAreaId || '') || 'N/A'}</span>
-          </div>
-          <div>
-            <span className="text-muted-foreground">Aspect:</span>
-            <span className="ml-1 font-medium">{selectedRun.aspect || 'N/A'}</span>
-          </div>
-          <div>
-            <span className="text-muted-foreground">Angle:</span>
-            <span className="ml-1 font-medium">{selectedRun.averageAngle ? capitalizeFirstLetter(selectedRun.averageAngle) : 'N/A'}</span>
-          </div>
-          <div>
-            <span className="text-muted-foreground">Elevation:</span>
-            <span className="ml-1 font-medium">
-              {selectedRun.elevationMin && selectedRun.elevationMax 
-                ? `${selectedRun.elevationMin}m - ${selectedRun.elevationMax}m`
-                : 'N/A'
-              }
-            </span>
-          </div>
-          <GpxUpdateButton 
-                              runId={selectedRun.id} 
-                              currentGpxPath={selectedRun.gpxPath}
-                            />  
-          </div>
-        </div>
+      </div>
+      </div>
 
       {/* Main Content */}
       <div className="flex-1 overflow-hidden">
@@ -289,7 +282,7 @@ export default function RunDetailView({ runId }: RunDetailViewProps) {
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
               {/* Run Description */}
               <Card>
-                <CardHeader className="pb-3">
+                <CardHeader className="">
                   <div className="flex items-center justify-between">
                     <CardTitle className="text-sm">Run Description</CardTitle>
                     <Button
@@ -302,9 +295,9 @@ export default function RunDetailView({ runId }: RunDetailViewProps) {
                     </Button>
                   </div>
                 </CardHeader>
-                <CardContent>
+                <CardContent className="p-0">
                   {editingField === 'description' ? (
-                    <div className="space-y-2">
+                    <div className="">
                       <Textarea
                         value={editDescription}
                         onChange={(e) => setEditDescription(e.target.value)}
@@ -331,8 +324,8 @@ export default function RunDetailView({ runId }: RunDetailViewProps) {
                       </div>
                     </div>
                   ) : (
-                    <p className="text-sm text-gray-700 min-h-[20px]">
-                      {selectedRun.runDescription || 'No description provided'}
+                    <p className="text-sm text-gray-700">
+                      {selectedRun.runDescription || null }
                     </p>
                   )}
                 </CardContent>
@@ -342,7 +335,7 @@ export default function RunDetailView({ runId }: RunDetailViewProps) {
               <Card>
                 <CardHeader className="pb-3">
                   <div className="flex items-center justify-between">
-                    <CardTitle className="text-lg">Run Notes</CardTitle>
+                    <CardTitle className="text-sm">Run Notes</CardTitle>
                     <Button
                       variant="ghost"
                       size="sm"
@@ -353,7 +346,7 @@ export default function RunDetailView({ runId }: RunDetailViewProps) {
                     </Button>
                   </div>
                 </CardHeader>
-                <CardContent>
+                <CardContent className="p-0">
                   {editingField === 'notes' ? (
                     <div className="space-y-2">
                       <Textarea
@@ -382,8 +375,8 @@ export default function RunDetailView({ runId }: RunDetailViewProps) {
                       </div>
               </div>
                   ) : (
-                    <p className="text-sm text-gray-700 min-h-[20px]">
-                      {selectedRun.runNotes || 'No notes provided'}
+                    <p className="text-sm text-gray-700">
+                      {selectedRun.runNotes || null }
                     </p>
                   )}
                 </CardContent>
@@ -391,7 +384,7 @@ export default function RunDetailView({ runId }: RunDetailViewProps) {
             </div>
             
             {/* Status Information (Read-only) */}
-            {selectedRun.statusComment && (
+            {/* {selectedRun.statusComment && (
               <Card>
                 <CardHeader className="pb-3">
                   <CardTitle className="text-lg">Status Comment</CardTitle>
@@ -402,7 +395,7 @@ export default function RunDetailView({ runId }: RunDetailViewProps) {
                 </p>
                 </CardContent>
               </Card>
-            )}
+            )} */}
 
             {/* Images Section */}
             <Card>
@@ -429,84 +422,87 @@ export default function RunDetailView({ runId }: RunDetailViewProps) {
                 </div>
               </CardHeader>
               <CardContent>
-                <div className="space-y-4">
-                  {/* Main Photos */}
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                    {/* Run Photo */}
-                    <div>
-                      <div className="flex items-center justify-between mb-1">
-                        <div className="flex items-center space-x-1 text-xs text-gray-600">
-                          <Mountain className="h-3 w-3" />
-                          <span>Run Photo</span>
-                        </div>
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          className="h-6 w-6 p-0"
-                          onClick={() => {
-                            const input = document.createElement('input');
-                            input.type = 'file';
-                            input.accept = 'image/*';
-                            input.onchange = async (e) => {
-                              const file = (e.target as HTMLInputElement).files?.[0];
-                              if (file) {
-                                try {
-                                  const formData = new FormData();
-                                  formData.append('file', file);
-                                  formData.append('runId', selectedRun.id);
-                                  formData.append('fieldName', 'runPhoto');
-                                  
-                                  const response = await fetch('/api/upload', {
-                                    method: 'POST',
-                                    body: formData,
+                <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 h-[500px]">
+                  {/* Main Run Photo - Takes up 2/3 of the space */}
+                  <div className="lg:col-span-2">
+                    <div className="flex items-center justify-between mb-2">
+                      <div className="flex items-center space-x-1 text-sm text-gray-600">
+                        <Mountain className="h-4 w-4" />
+                        <span className="font-medium">Main Run Photo</span>
+                      </div>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => {
+                          const input = document.createElement('input');
+                          input.type = 'file';
+                          input.accept = 'image/*';
+                          input.onchange = async (e) => {
+                            const file = (e.target as HTMLInputElement).files?.[0];
+                            if (file) {
+                              try {
+                                const formData = new FormData();
+                                formData.append('file', file);
+                                formData.append('runId', selectedRun.id);
+                                formData.append('fieldName', 'runPhoto');
+                                
+                                const response = await fetch('/api/upload', {
+                                  method: 'POST',
+                                  body: formData,
+                                });
+                                
+                                if (response.ok) {
+                                  const { url } = await response.json();
+                                  const updateResponse = await fetch(`/api/runs/${selectedRun.id}`, {
+                                    method: 'PATCH',
+                                    headers: { 'Content-Type': 'application/json' },
+                                    body: JSON.stringify({ runPhoto: url }),
                                   });
-                                  
-                                  if (response.ok) {
-                                    const { url } = await response.json();
-                                    const updateResponse = await fetch(`/api/runs/${selectedRun.id}`, {
-                                      method: 'PATCH',
-                                      headers: { 'Content-Type': 'application/json' },
-                                      body: JSON.stringify({ runPhoto: url }),
-                                    });
-                                    if (updateResponse.ok) {
-                                      queryClient.invalidateQueries({ queryKey: ['/api/runs'] });
-                                    }
+                                  if (updateResponse.ok) {
+                                    queryClient.invalidateQueries({ queryKey: ['/api/runs'] });
                                   }
-                                } catch (error) {
-                                  console.error('Failed to upload run photo:', error);
                                 }
+                              } catch (error) {
+                                console.error('Failed to upload run photo:', error);
                               }
-                            };
-                            input.click();
-                          }}
-                        >
-                          <Plus className="h-3 w-3" />
-                        </Button>
-                      </div>
-                      <div className="h-24 border rounded-lg overflow-hidden">
-                        {selectedRun.runPhoto ? (
-                          <Image
-                            src={selectedRun.runPhoto}
-                            alt="Run photo"
-                            width={200}
-                            height={96}
-                            className="w-full h-full object-cover cursor-pointer hover:opacity-90"
-                            onClick={() => selectedRun.runPhoto && handleImageClick(selectedRun.runPhoto)}
-                          />
-                        ) : (
-                          <div className="w-full h-full bg-gray-100 flex items-center justify-center text-gray-400 text-xs">
-                            No photo
-                          </div>
-                        )}
-                      </div>
+                            }
+                          };
+                          input.click();
+                        }}
+                        className="flex items-center gap-1"
+                      >
+                        <Plus className="h-4 w-4" />
+                        {selectedRun.runPhoto ? 'Change' : 'Add Photo'}
+                      </Button>
                     </div>
+                    <div className="h-[460px] border rounded-lg overflow-hidden bg-gray-50">
+                      {selectedRun.runPhoto ? (
+                        <Image
+                          src={selectedRun.runPhoto}
+                          alt="Run photo"
+                          width={600}
+                          height={460}
+                          className="w-full h-full object-cover cursor-pointer hover:opacity-90 transition-opacity"
+                          onClick={() => selectedRun.runPhoto && handleImageClick(selectedRun.runPhoto)}
+                        />
+                      ) : (
+                        <div className="w-full h-full flex flex-col items-center justify-center text-gray-400">
+                          <Mountain className="h-12 w-12 mb-2" />
+                          <p className="text-sm">No main photo</p>
+                          <p className="text-xs">Click &quot;Add Photo&quot; to upload</p>
+                        </div>
+                      )}
+                    </div>
+                  </div>
 
-                    {/* Avalanche Photo */}
-                    <div>
-                      <div className="flex items-center justify-between mb-1">
-                        <div className="flex items-center space-x-1 text-xs text-gray-600">
-                          <AlertTriangle className="h-3 w-3" />
-                          <span>Avalanche Path</span>
+                  {/* Right Column - Two vertical galleries */}
+                  <div className="space-y-4">
+                    {/* Avalanche Photos Gallery */}
+                    <div className="flex-1">
+                      <div className="flex items-center justify-between mb-2">
+                        <div className="flex items-center space-x-1 text-sm text-gray-600">
+                          <AlertTriangle className="h-4 w-4" />
+                          <span className="font-medium">Avalanche Photos</span>
                         </div>
                         <Button
                           variant="outline"
@@ -552,118 +548,147 @@ export default function RunDetailView({ runId }: RunDetailViewProps) {
                           <Plus className="h-3 w-3" />
                         </Button>
                       </div>
-                      <div className="h-24 border rounded-lg overflow-hidden">
+                      <div className="space-y-2 max-h-[220px] overflow-y-auto">
                         {selectedRun.avalanchePhoto ? (
-                          <Image
-                            src={selectedRun.avalanchePhoto}
-                            alt="Avalanche photo"
-                            width={200}
-                            height={96}
-                            className="w-full h-full object-cover cursor-pointer hover:opacity-90"
-                            onClick={() => selectedRun.avalanchePhoto && handleImageClick(selectedRun.avalanchePhoto)}
-                          />
+                          <div className="relative group">
+                            <div className="h-32 border rounded overflow-hidden">
+                              <Image
+                                src={selectedRun.avalanchePhoto}
+                                alt="Avalanche photo"
+                                width={200}
+                                height={128}
+                                className="w-full h-full object-cover cursor-pointer hover:opacity-90 transition-opacity"
+                                onClick={() => selectedRun.avalanchePhoto && handleImageClick(selectedRun.avalanchePhoto)}
+                              />
+                            </div>
+                            <Button
+                              variant="destructive"
+                              size="sm"
+                              className="absolute top-1 right-1 h-5 w-5 p-0 opacity-0 group-hover:opacity-100 transition-opacity"
+                              onClick={async (e) => {
+                                e.stopPropagation();
+                                try {
+                                  const response = await fetch(`/api/runs/${selectedRun.id}`, {
+                                    method: 'PATCH',
+                                    headers: { 'Content-Type': 'application/json' },
+                                    body: JSON.stringify({ avalanchePhoto: null }),
+                                  });
+                                  if (response.ok) {
+                                    queryClient.invalidateQueries({ queryKey: ['/api/runs'] });
+                                  }
+                                } catch (error) {
+                                  console.error('Failed to remove avalanche photo:', error);
+                                }
+                              }}
+                            >
+                              <X className="h-3 w-3" />
+                            </Button>
+                          </div>
                         ) : (
-                          <div className="w-full h-full bg-gray-100 flex items-center justify-center text-gray-400 text-xs">
-                            No photo
+                          <div className="h-32 border rounded bg-gray-100 flex items-center justify-center text-gray-400 text-xs">
+                            No avalanche photo
                           </div>
                         )}
                       </div>
                     </div>
-                  </div>
 
-                  {/* Additional Photos */}
-                  <div>
-                    <div className="flex items-center justify-between mb-2">
-                      <div className="flex items-center space-x-1 text-xs text-gray-600">
-                        <Mountain className="h-3 w-3" />
-                        <span>Additional Photos ({selectedRun.additionalPhotos?.length || 0})</span>
-                      </div>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        className="h-6 w-6 p-0"
-                        onClick={() => {
-                          const input = document.createElement('input');
-                          input.type = 'file';
-                          input.accept = 'image/*';
-                          input.onchange = async (e) => {
-                            const file = (e.target as HTMLInputElement).files?.[0];
-                            if (file) {
-                              try {
-                                const formData = new FormData();
-                                formData.append('file', file);
-                                formData.append('runId', selectedRun.id);
-                                formData.append('fieldName', 'additionalPhotos');
-                                
-                                const response = await fetch('/api/upload', {
-                                  method: 'POST',
-                                  body: formData,
-                                });
-                                
-                                if (response.ok) {
-                                  const { url } = await response.json();
-                                  const updatedPhotos = [...(selectedRun.additionalPhotos || []), url];
-                                  const updateResponse = await fetch(`/api/runs/${selectedRun.id}`, {
-                                    method: 'PATCH',
-                                    headers: { 'Content-Type': 'application/json' },
-                                    body: JSON.stringify({ additionalPhotos: updatedPhotos }),
+                    {/* Additional Photos Gallery */}
+                    <div className="flex-1">
+                      <div className="flex items-center justify-between mb-2">
+                        <div className="flex items-center space-x-1 text-sm text-gray-600">
+                          <Mountain className="h-4 w-4" />
+                          <span className="font-medium">Additional Photos ({selectedRun.additionalPhotos?.length || 0})</span>
+                        </div>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="h-6 w-6 p-0"
+                          onClick={() => {
+                            const input = document.createElement('input');
+                            input.type = 'file';
+                            input.accept = 'image/*';
+                            input.onchange = async (e) => {
+                              const file = (e.target as HTMLInputElement).files?.[0];
+                              if (file) {
+                                try {
+                                  const formData = new FormData();
+                                  formData.append('file', file);
+                                  formData.append('runId', selectedRun.id);
+                                  formData.append('fieldName', 'additionalPhotos');
+                                  
+                                  const response = await fetch('/api/upload', {
+                                    method: 'POST',
+                                    body: formData,
                                   });
-                                  if (updateResponse.ok) {
-                                    queryClient.invalidateQueries({ queryKey: ['/api/runs'] });
+                                  
+                                  if (response.ok) {
+                                    const { url } = await response.json();
+                                    const updatedPhotos = [...(selectedRun.additionalPhotos || []), url];
+                                    const updateResponse = await fetch(`/api/runs/${selectedRun.id}`, {
+                                      method: 'PATCH',
+                                      headers: { 'Content-Type': 'application/json' },
+                                      body: JSON.stringify({ additionalPhotos: updatedPhotos }),
+                                    });
+                                    if (updateResponse.ok) {
+                                      queryClient.invalidateQueries({ queryKey: ['/api/runs'] });
+                                    }
                                   }
+                                } catch (error) {
+                                  console.error('Failed to add additional photo:', error);
                                 }
-                              } catch (error) {
-                                console.error('Failed to add additional photo:', error);
                               }
-                            }
-                          };
-                          input.click();
-                        }}
-                      >
-                        <Plus className="h-3 w-3" />
-                      </Button>
-                    </div>
-                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-1">
-                      {selectedRun.additionalPhotos?.slice(0, 4).map((photo, index) => (
-                        <div key={index} className="h-16 border rounded overflow-hidden relative group">
-                          <Image
-                            src={photo}
-                            alt={`Additional photo ${index + 1}`}
-                            width={80}
-                            height={64}
-                            className="w-full h-full object-cover cursor-pointer hover:opacity-90"
-                            onClick={() => handleImageClick(photo)}
-                          />
-                          <Button
-                            variant="destructive"
-                            size="sm"
-                            className="absolute top-1 right-1 h-5 w-5 p-0 opacity-0 group-hover:opacity-100 transition-opacity"
-                            onClick={async (e) => {
-                              e.stopPropagation();
-                              try {
-                                const updatedPhotos = selectedRun.additionalPhotos?.filter((_, i) => i !== index) || [];
-                                const response = await fetch(`/api/runs/${selectedRun.id}`, {
-                                  method: 'PATCH',
-                                  headers: { 'Content-Type': 'application/json' },
-                                  body: JSON.stringify({ additionalPhotos: updatedPhotos }),
-                                });
-                                if (response.ok) {
-                                  queryClient.invalidateQueries({ queryKey: ['/api/runs'] });
-                                }
-                              } catch (error) {
-                                console.error('Failed to remove photo:', error);
-                              }
-                            }}
-                          >
-                            <X className="h-3 w-3" />
-                          </Button>
-                        </div>
-                      ))}
-                      {(!selectedRun.additionalPhotos || selectedRun.additionalPhotos.length === 0) && (
-                        <div className="col-span-full text-center py-4 text-gray-400 text-xs">
-                          No additional photos
-                        </div>
-                      )}
+                            };
+                            input.click();
+                          }}
+                        >
+                          <Plus className="h-3 w-3" />
+                        </Button>
+                      </div>
+                      <div className="space-y-2 max-h-[220px] overflow-y-auto">
+                        {selectedRun.additionalPhotos && selectedRun.additionalPhotos.length > 0 ? (
+                          selectedRun.additionalPhotos.map((photo, index) => (
+                            <div key={index} className="relative group">
+                              <div className="h-20 border rounded overflow-hidden">
+                                <Image
+                                  src={photo}
+                                  alt={`Additional photo ${index + 1}`}
+                                  width={200}
+                                  height={80}
+                                  className="w-full h-full object-cover cursor-pointer hover:opacity-90 transition-opacity"
+                                  onClick={() => handleImageClick(photo)}
+                                />
+                              </div>
+                              <Button
+                                variant="destructive"
+                                size="sm"
+                                className="absolute top-1 right-1 h-5 w-5 p-0 opacity-0 group-hover:opacity-100 transition-opacity"
+                                onClick={async (e) => {
+                                  e.stopPropagation();
+                                  try {
+                                    const updatedPhotos = selectedRun.additionalPhotos?.filter((_, i) => i !== index) || [];
+                                    const response = await fetch(`/api/runs/${selectedRun.id}`, {
+                                      method: 'PATCH',
+                                      headers: { 'Content-Type': 'application/json' },
+                                      body: JSON.stringify({ additionalPhotos: updatedPhotos }),
+                                    });
+                                    if (response.ok) {
+                                      queryClient.invalidateQueries({ queryKey: ['/api/runs'] });
+                                    }
+                                  } catch (error) {
+                                    console.error('Failed to remove photo:', error);
+                                  }
+                                }}
+                              >
+                                <X className="h-3 w-3" />
+                              </Button>
+                            </div>
+                          ))
+                        ) : (
+                          <div className="h-20 border rounded bg-gray-100 flex items-center justify-center text-gray-400 text-xs">
+                            No additional photos
+                          </div>
+                        )}
+                      </div>
                     </div>
                   </div>
                 </div>

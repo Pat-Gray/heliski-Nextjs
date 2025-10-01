@@ -7,15 +7,41 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Calendar } from "@/components/ui/calendar";
 import { Badge } from "@/components/ui/badge";
-import { Calendar as CalendarIcon, Printer } from "lucide-react";
-import Navigation from "@/components/navigation";
+import { Printer, ChevronDown, ChevronRight } from "lucide-react";
 import { usePrint } from "@/components/print-provider";
 import type { DailyPlan, Run, Area, SubArea } from "@/lib/schemas/schema";
 import { queryFn } from "@/lib/queryClient";
 
 export default function DailyPlans() {
   const [selectedDate, setSelectedDate] = useState<Date | undefined>(new Date());
+  const [collapsedAreas, setCollapsedAreas] = useState<Set<string>>(new Set());
+  const [collapsedSubAreas, setCollapsedSubAreas] = useState<Set<string>>(new Set());
   const { setPrintData, triggerPrint } = usePrint();
+
+  // Toggle functions for collapsible areas and sub-areas
+  const toggleArea = (areaId: string) => {
+    setCollapsedAreas(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(areaId)) {
+        newSet.delete(areaId);
+      } else {
+        newSet.add(areaId);
+      }
+      return newSet;
+    });
+  };
+
+  const toggleSubArea = (subAreaId: string) => {
+    setCollapsedSubAreas(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(subAreaId)) {
+        newSet.delete(subAreaId);
+      } else {
+        newSet.add(subAreaId);
+      }
+      return newSet;
+    });
+  };
 
   const { data: dailyPlans = [], isLoading: dailyPlansLoading } = useQuery<DailyPlan[]>({
     queryKey: ["/api/daily-plans"],
@@ -39,15 +65,6 @@ export default function DailyPlans() {
 
   const isLoading = dailyPlansLoading || runsLoading || areasLoading || subAreasLoading;
 
-  const getAngleLabel = (angle: string) => {
-    switch (angle) {
-      case 'gentle': return 'Gentle (≤25°)';
-      case 'moderate': return 'Moderate (26-35°)';
-      case 'steep': return 'Steep (36-45°)';
-      case 'very_steep': return 'Very Steep (>45°)';
-      default: return angle;
-    }
-  };
 
   const selectedPlan = selectedDate 
     ? dailyPlans.find(plan => 
@@ -144,34 +161,11 @@ export default function DailyPlans() {
   return (
     <ProtectedRoute>
       <div className="flex h-screen bg-background">
-      {/* Sidebar */}
-      <div className="w-80 bg-card border-r border-border flex flex-col">
-        <div className="p-6 border-b border-border">
-          <div className="flex items-center space-x-3">
-            <div className="w-10 h-10 bg-primary rounded-lg flex items-center justify-center">
-              <CalendarIcon className="w-6 h-6 text-primary-foreground" />
-            </div>
-            <div>
-              <h1 className="text-xl font-bold text-foreground">Daily Plans</h1>
-              <p className="text-sm text-muted-foreground">Plan Management</p>
-            </div>
-          </div>
-        </div>
-
-        <Navigation />
-        
-        {/* Daily Plans List */}
-        
-      </div>
+    
 
       {/* Main Content */}
       <div className="flex-1 flex flex-col">
-        <header className="bg-card border-b border-border px-4 lg:px-6 py-4 flex-shrink-0">
-          <div className="flex items-center justify-between">
-            <h2 className="text-xl lg:text-2xl font-bold text-foreground">Daily Planning</h2>
-          </div>
-        </header>
-
+       
         <main className="flex-1 p-4 lg:p-6 min-h-0">
           {isLoading ? (
             <div className="flex items-center justify-center h-full">
@@ -181,7 +175,7 @@ export default function DailyPlans() {
               </div>
             </div>
           ) : (
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 h-full">
+            <div className="flex gap-6 h-full">
             {/* Calendar */}
             <Card className="h-fit">
               <CardHeader>
@@ -201,7 +195,7 @@ export default function DailyPlans() {
             </Card>
 
             {/* Plan Details */}
-            <Card className="flex flex-col h-full">
+            <Card className="flex flex-col h-full w-full">
               <CardHeader className="flex-shrink-0">
                 <div className="flex items-center justify-between">
                 <CardTitle>
@@ -253,50 +247,75 @@ export default function DailyPlans() {
                           <div key={area.id} className="space-y-4">
                             {/* Area Header */}
                             <div className="border-l-4 border-blue-500 pl-4">
-                              <h4 className="text-lg font-semibold text-gray-900">{area.name}</h4>
+                              <button
+                                onClick={() => toggleArea(area.id)}
+                                className="flex items-center gap-2 w-full text-left hover:bg-gray-50 p-2 -m-2 rounded transition-colors"
+                              >
+                                {collapsedAreas.has(area.id) ? (
+                                  <ChevronRight className="h-5 w-5 text-gray-500" />
+                                ) : (
+                                  <ChevronDown className="h-5 w-5 text-gray-500" />
+                                )}
+                                <h4 className="text-lg font-semibold text-gray-900">{area.name}</h4>
+                              </button>
                             </div>
                             
                             {/* Sub-areas */}
-                            {Object.values(subAreas).map(({ subArea, runs: subAreaRuns }) => (
+                            {!collapsedAreas.has(area.id) && Object.values(subAreas).map(({ subArea, runs: subAreaRuns }) => (
                               <div key={subArea.id} className="ml-4 space-y-3">
                                 {/* Sub-area Header */}
                                 <div className="border-l-2 border-gray-300 pl-3">
-                                  <h5 className="text-md font-medium text-gray-700">{subArea.name}</h5>
+                                  <button
+                                    onClick={() => toggleSubArea(subArea.id)}
+                                    className="flex items-center gap-2 w-full text-left hover:bg-gray-50 p-2 -m-2 rounded transition-colors"
+                                  >
+                                    {collapsedSubAreas.has(subArea.id) ? (
+                                      <ChevronRight className="h-4 w-4 text-gray-500" />
+                                    ) : (
+                                      <ChevronDown className="h-4 w-4 text-gray-500" />
+                                    )}
+                                    <h5 className="text-md font-medium text-gray-700">{subArea.name}</h5>
+                                  </button>
                                 </div>
                                 
                                 {/* Runs in this sub-area */}
-                                <div className="space-y-2">
-                                  {subAreaRuns
-                                    .sort((a, b) => a.runNumber - b.runNumber)
-                                    .map((run) => (
-                          <div 
-                            key={run.id} 
-                                      className="flex items-center justify-between p-3 border rounded-lg bg-gray-50"
-                            data-testid={`selected-run-${run.id}`}
-                          >
-                                      <div className="flex items-center space-x-3">
-                                        <div>
-                                          <div className="font-medium">#{run.runNumber} {run.name}</div>
-                                          <div className="text-sm text-muted-foreground">
-                                            {run.aspect} • {getAngleLabel(run.averageAngle)} • {run.elevationMax}-{run.elevationMin}m
+                                {!collapsedSubAreas.has(subArea.id) && (
+                                  <div className="space-y-2">
+                                    {subAreaRuns
+                                      .sort((a, b) => a.runNumber - b.runNumber)
+                                      .map((run) => (
+                            <div 
+                              key={run.id} 
+                                        className="flex items-center justify-between p-3 border rounded-lg bg-gray-50"
+                              data-testid={`selected-run-${run.id}`}
+                            >
+                                        <div className="flex items-center space-x-3">
+                                          <div>
+                                            <div className="font-medium">#{run.runNumber} {run.name}</div>
+                                            <div className="text-sm text-muted-foreground">
+                                              {run.aspect} • {run.elevationMax}-{run.elevationMin}m
+                                            </div>
                                           </div>
                                         </div>
+                                        <div className="flex items-center space-x-2">
+                                          <div className="text-sm text-muted-foreground">
+                                            {run.statusComment || null}
+                                          </div>
+                                          <Badge 
+                                            className={
+                                              run.status === "open" ? "bg-green-500 hover:bg-green-600" :
+                                              run.status === "conditional" ? "bg-orange-500 hover:bg-orange-600" :
+                                              "bg-red-500 hover:bg-red-600"
+                                            }
+                                          >
+                                            {run.status === "open" ? "Open" :
+                                             run.status === "conditional" ? "Conditional" : "Closed"}
+                                          </Badge>
+                                        </div>
                                       </div>
-                                      <div className="flex items-center space-x-2">
-                                        <Badge 
-                                          className={
-                                            run.status === "open" ? "bg-green-500 hover:bg-green-600" :
-                                            run.status === "conditional" ? "bg-orange-500 hover:bg-orange-600" :
-                                            "bg-red-500 hover:bg-red-600"
-                                          }
-                                        >
-                                          {run.status === "open" ? "Open" :
-                                           run.status === "conditional" ? "Conditional" : "Closed"}
-                                        </Badge>
-                                      </div>
-                                    </div>
-                                  ))}
-                                </div>
+                                    ))}
+                                  </div>
+                                )}
                               </div>
                             ))}
                           </div>
