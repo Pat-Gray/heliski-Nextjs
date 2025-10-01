@@ -107,9 +107,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
         data: {
           role,
         },
-        user_metadata: {
-          role,
-        },
+        
       },
     });
     return { error };
@@ -147,8 +145,8 @@ export function AuthProvider({ children }: AuthProviderProps) {
     if (!user) return { error: { message: 'No user logged in' } as AuthError };
     
     const { error } = await supabase.auth.updateUser({
-      data: { role: newRole },
-      user_metadata: { role: newRole }
+        data: { role: newRole },
+     
     });
     
     if (!error && user) {
@@ -164,7 +162,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
   };
 
   // Extract role from user metadata or direct role property
-  const getUserRole = (user: any): UserRole => {
+  const getUserRole = (user: AuthUser | null ): UserRole => {
     if (!user) return 'user';
     return user.role || user.user_metadata?.role || 'user';
   };
@@ -176,8 +174,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
   if (typeof window !== 'undefined' && process.env.NODE_ENV === 'development') {
     console.log('Auth Debug:', {
       user,
-      role: getUserRole(user),
-      user_metadata: user?.user_metadata,
+      role: getUserRole(user),  
       isSuperAdmin,
       isAuthenticated
     });
