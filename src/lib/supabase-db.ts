@@ -76,7 +76,6 @@ export async function getRuns() {
     runDescription: item.run_description, // Convert run_description to runDescription
     runNotes: item.run_notes, // Convert run_notes to runNotes
     aspect: item.aspect,
-    averageAngle: item.average_angle, // Convert average_angle to averageAngle
     elevationMax: item.elevation_max, // Convert elevation_max to elevationMax
     elevationMin: item.elevation_min, // Convert elevation_min to elevationMin
     status: item.status,
@@ -189,7 +188,6 @@ export async function createRun(run: {
   runDescription?: string;
   runNotes?: string;
   aspect: string;
-  averageAngle: string;
   elevationMax: number;
   elevationMin: number;
   status: string;
@@ -229,7 +227,6 @@ export async function createRun(run: {
     run_description: run.runDescription, // Convert runDescription to run_description
     run_notes: run.runNotes, // Convert runNotes to run_notes
     aspect: run.aspect,
-    average_angle: run.averageAngle, // Convert averageAngle to average_angle
     elevation_max: run.elevationMax, // Convert elevationMax to elevation_max
     elevation_min: run.elevationMin, // Convert elevationMin to elevation_min
     status: run.status,
@@ -320,7 +317,6 @@ export async function updateRun(id: string, updates: Partial<{
   runDescription: string;
   runNotes: string;
   aspect: string;
-  averageAngle: string;
   elevationMax: number;
   elevationMin: number;
   status: string;
@@ -347,7 +343,6 @@ export async function updateRun(id: string, updates: Partial<{
   if (updates.runDescription !== undefined) dbUpdates.run_description = updates.runDescription;
   if (updates.runNotes !== undefined) dbUpdates.run_notes = updates.runNotes;
   if (updates.aspect !== undefined) dbUpdates.aspect = updates.aspect;
-  if (updates.averageAngle !== undefined) dbUpdates.average_angle = updates.averageAngle;
   if (updates.elevationMax !== undefined) dbUpdates.elevation_max = updates.elevationMax;
   if (updates.elevationMin !== undefined) dbUpdates.elevation_min = updates.elevationMin;
   if (updates.status !== undefined) dbUpdates.status = updates.status;

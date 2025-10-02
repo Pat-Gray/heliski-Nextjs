@@ -37,7 +37,6 @@ export default function RunFormModal({ preselectedSubAreaId }: RunFormModalProps
   const [runDescription, setRunDescription] = useState("");
   const [runNotes, setRunNotes] = useState("");
   const [aspect, setAspect] = useState("");
-  const [averageAngle, setAverageAngle] = useState("");
   const [elevationMin, setElevationMin] = useState("");
   const [elevationMax, setElevationMax] = useState("");
   const [status, setStatus] = useState("open");
@@ -116,7 +115,6 @@ export default function RunFormModal({ preselectedSubAreaId }: RunFormModalProps
       runDescription?: string;
       runNotes?: string;
       aspect: string;
-      averageAngle: string;
       elevationMin: number;
       elevationMax: number;
       status: string;
@@ -190,7 +188,7 @@ export default function RunFormModal({ preselectedSubAreaId }: RunFormModalProps
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!name.trim() || !aspect || !averageAngle || !elevationMin || !elevationMax) {
+    if (!name.trim() || !aspect || !elevationMin || !elevationMax) {
       toast({ title: "Please fill in all required fields", variant: "destructive" });
       return;
     }
@@ -218,7 +216,6 @@ export default function RunFormModal({ preselectedSubAreaId }: RunFormModalProps
       runDescription: runDescription.trim() || undefined,
       runNotes: runNotes.trim() || undefined,
       aspect: aspect.toUpperCase(),
-      averageAngle: averageAngle,
       elevationMin: parseInt(elevationMin),
       elevationMax: parseInt(elevationMax),
       status: status,
@@ -276,7 +273,6 @@ export default function RunFormModal({ preselectedSubAreaId }: RunFormModalProps
     setRunDescription("");
     setRunNotes("");
     setAspect("");
-    setAverageAngle("");
     setElevationMin("");
     setElevationMax("");
     setStatus("open");
@@ -400,22 +396,6 @@ export default function RunFormModal({ preselectedSubAreaId }: RunFormModalProps
                     <SelectItem value="SW">Southwest</SelectItem>
                     <SelectItem value="W">West</SelectItem>
                     <SelectItem value="NW">Northwest</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-              <div>
-                <label htmlFor="averageAngle" className="text-sm font-medium">
-                  Average Angle *
-                </label>
-                <Select value={averageAngle} onValueChange={setAverageAngle}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select angle" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="gentle">Gentle (≤25°)</SelectItem>
-                    <SelectItem value="moderate">Moderate (26-35°)</SelectItem>
-                    <SelectItem value="steep">Steep (36-45°)</SelectItem>
-                    <SelectItem value="very_steep">Very Steep (&gt;45°)</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
@@ -764,7 +744,6 @@ export default function RunFormModal({ preselectedSubAreaId }: RunFormModalProps
                 createRunMutation.isPending || 
                 !name.trim() || 
                 !aspect || 
-                !averageAngle || 
                 !elevationMin || 
                 !elevationMax || 
                 !preselectedSubAreaId ||

@@ -24,7 +24,6 @@ export const runs = pgTable("runs", {
   runDescription: text("run_description"), // Optional run description
   runNotes: text("run_notes"), // Optional run notes
   aspect: text("aspect").notNull(), // SW, W, E, NW, etc.
-  averageAngle: text("average_angle").notNull(), // ENUM for gradient
   elevationMax: integer("elevation_max").notNull(), // meters
   elevationMin: integer("elevation_min").notNull(), // meters
   status: text("status").notNull().default("open"), // open, conditional, closed
@@ -88,7 +87,6 @@ export const insertRunSchema = createInsertSchema(runs).omit({
 }).extend({
   status: z.enum(["open", "conditional", "closed"]),
   aspect: z.enum(["N", "NE", "E", "SE", "S", "SW", "W", "NW"]),
-  averageAngle: z.enum(["gentle", "moderate", "steep", "very_steep"]),
   runDescription: z.string().optional(),
   runNotes: z.string().optional(),
   statusComment: z.string().nullable().optional(),
@@ -113,7 +111,6 @@ export const updateRunSchema = z.object({
   runDescription: z.string().optional(),
   runNotes: z.string().optional(),
   aspect: z.enum(["N", "NE", "E", "SE", "S", "SW", "W", "NW"]).optional(),
-  averageAngle: z.enum(["gentle", "moderate", "steep", "very_steep"]).optional(),
   elevationMax: z.number().optional(),
   elevationMin: z.number().optional(),
   status: z.enum(["open", "conditional", "closed"]).optional(),
