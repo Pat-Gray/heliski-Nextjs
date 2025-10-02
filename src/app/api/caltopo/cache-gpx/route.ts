@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { caltopoRequest } from '../../../../utils/caltopo';
-import { uploadGPX, getGPX, initializeStorageBucket, getSignedGPXUrl } from '../../../../lib/supabase-storage';
+import { uploadGPX, getGPX, initializeStorageBucket} from '../../../../lib/supabase-storage';
 import { geojsonToGPX } from '../../../../lib/geojson-to-gpx';
 import { supabase } from '../../../../lib/supabase-db';
 
@@ -20,16 +20,55 @@ interface CacheGPXResponse {
 }
 
 interface CalTopoFeature {
+  type: 'Feature';
   id: string;
-  geometry?: {
-    type: string;
-    coordinates: number[] | number[][];
+  geometry: {
+    type: 'LineString' | 'MultiLineString';
+    coordinates: number[][];
   };
   properties?: {
     name?: string;
     description?: string;
     [key: string]: unknown;
   };
+}
+
+interface CalTopoMapState {
+  features?: CalTopoFeature[];
+  [key: string]: unknown;
+}
+
+interface CalTopoMapData {
+  state?: CalTopoMapState;
+  [key: string]: unknown;
+}
+
+// Type guard to check if the response is a valid CalTopo map data
+function isCalTopoMapData(data: unknown): data is CalTopoMapData {
+  return (
+    typeof data === 'object' &&
+    data !== null &&
+    'state' in data &&
+    (data.state === undefined || 
+     (typeof data.state === 'object' && 
+      data.state !== null && 
+      ('features' in data.state ? 
+        Array.isArray(data.state.features) && 
+        data.state.features.every(f => 
+          typeof f === 'object' && 
+          f !== null && 
+          'type' in f && 
+          f.type === 'Feature' &&
+          'id' in f &&
+          'geometry' in f &&
+          typeof f.geometry === 'object' &&
+          f.geometry !== null &&
+          'type' in f.geometry &&
+          (f.geometry.type === 'LineString' || f.geometry.type === 'MultiLineString') &&
+          'coordinates' in f.geometry &&
+          Array.isArray(f.geometry.coordinates)
+        ) : true)))
+  );
 }
 
 export async function POST(request: NextRequest) {
@@ -128,12 +167,19 @@ export async function POST(request: NextRequest) {
     let method: 'geojson' | 'gpx-extract' | 'map-data-convert' = 'geojson';
     
     try {
-      const mapData = await caltopoRequest(
+      const mapDataResponse = await caltopoRequest(
         'GET',
         `/api/v1/map/${mapId}/since/0`,
         credentialId,
         credentialSecret
       );
+
+      // Type guard to ensure we have valid map data
+      if (!isCalTopoMapData(mapDataResponse)) {
+        throw new Error('Invalid map data structure received from CalTopo API');
+      }
+
+      const mapData: CalTopoMapData = mapDataResponse;
 
       console.log('📊 Map data received:', {
         hasState: !!mapData.state,
@@ -178,12 +224,19 @@ export async function POST(request: NextRequest) {
       
         // Method 2: Get map data and convert features to GPX
         try {
-          const mapData = await caltopoRequest(
+          const mapDataResponse = await caltopoRequest(
             'GET',
             `/api/v1/map/${mapId}/since/0`,
             credentialId,
             credentialSecret
           );
+
+          // Type guard to ensure we have valid map data
+          if (!isCalTopoMapData(mapDataResponse)) {
+            throw new Error('Invalid map data structure received from CalTopo API');
+          }
+
+          const mapData: CalTopoMapData = mapDataResponse;
 
         console.log('📥 Downloaded map data:', {
           hasState: !!mapData.state,

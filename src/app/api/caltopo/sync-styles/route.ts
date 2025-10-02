@@ -2,6 +2,26 @@ import { NextRequest, NextResponse } from 'next/server';
 import { caltopoRequest } from '../../../../utils/caltopo';
 import { supabase } from '../../../../lib/supabase-db';
 
+interface CalTopoFeature {
+  id: string;
+  properties: {
+    stroke: string;
+    fill: string;
+    [key: string]: unknown;
+  };
+  [key: string]: unknown;
+}
+
+interface CalTopoMapState {
+  features: CalTopoFeature[];
+  [key: string]: unknown;
+}
+
+interface CalTopoMapResponse {
+  state: CalTopoMapState;
+  [key: string]: unknown;
+}
+
 interface SyncStylesRequest {
   dailyPlanId?: string;
   runIds?: string[];
@@ -161,7 +181,7 @@ export async function POST(request: NextRequest) {
           `/api/v1/map/${mapId}/since/0`,
           credentialId,
           credentialSecret
-        );
+        ) as CalTopoMapResponse;
 
         console.log('📊 Map data received:', {
           hasState: !!mapData.state,
@@ -179,7 +199,7 @@ export async function POST(request: NextRequest) {
 
         // Update feature styles
         let mapUpdated = false;
-        const updatedFeatures = mapData.state.features.map((feature: any) => {
+        const updatedFeatures = mapData.state.features.map((feature: CalTopoFeature) => {
           const runForFeature = mapRuns.find(r => r.featureId === feature.id);
           
           if (!runForFeature) {
@@ -235,11 +255,12 @@ export async function POST(request: NextRequest) {
               
               featuresUpdated++;
               console.log(`✅ Updated feature ${feature.id} for run ${runForFeature.runId}`);
-            } catch (featureError: any) {
-              console.error(`❌ Failed to update feature ${feature.id}:`, featureError.message);
+            } catch (featureError: unknown) {
+              const errorMessage = featureError instanceof Error ? featureError.message : 'Unknown error';
+              console.error(`❌ Failed to update feature ${feature.id}:`, errorMessage);
               failed.push({ 
                 runId: runForFeature.runId, 
-                reason: `Feature update failed: ${featureError.message}` 
+                reason: `Feature update failed: ${errorMessage}` 
               });
             }
           }
@@ -257,11 +278,12 @@ export async function POST(request: NextRequest) {
           console.log('ℹ️ No features needed updating for map:', mapId.substring(0, 8) + '...');
         }
 
-      } catch (mapError: any) {
-        console.error(`❌ Failed to update map ${mapId.substring(0, 8)}...:`, mapError.message);
+      } catch (mapError: unknown) {
+        const errorMessage = mapError instanceof Error ? mapError.message : 'Unknown error';
+        console.error(`❌ Failed to update map ${mapId.substring(0, 8)}...:`, errorMessage);
         failed.push(...mapRuns.map(r => ({ 
           runId: r.runId, 
-          reason: `Map update failed: ${mapError.message}` 
+          reason: `Map update failed: ${errorMessage}` 
         })));
       }
     }
@@ -283,16 +305,20 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json(response);
 
-  } catch (error: any) {
+  } catch (error: unknown) {
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+    const errorStack = error instanceof Error ? error.stack : undefined;
+    const errorName = error instanceof Error ? error.name : 'Unknown';
+    
     console.error('❌ Sync Styles API Error:', {
-      errorMessage: error.message,
-      errorStack: error.stack,
-      errorName: error.name
+      errorMessage,
+      errorStack,
+      errorName
     });
 
     return NextResponse.json({
       success: false,
-      error: error.message,
+      error: errorMessage,
       updated: 0,
       skippedUnlinked: [],
       failed: [],

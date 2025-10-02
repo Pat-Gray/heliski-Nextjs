@@ -20,7 +20,9 @@ const eslintConfig = [
         "destructuredArrayIgnorePattern": "^_"
       }],
       "@typescript-eslint/no-require-imports": "off",
+      "@typescript-eslint/no-explicit-any": "error",
       "jsx-a11y/alt-text": "warn",
+      "react/no-unescaped-entities": "error",
     },
   },
   {

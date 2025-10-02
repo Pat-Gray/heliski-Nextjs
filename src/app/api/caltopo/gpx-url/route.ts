@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getSignedGPXUrl, gpxExists } from '../../../../lib/supabase-storage';
+import { gpxExists } from '../../../../lib/supabase-storage';
 import { supabase } from '../../../../lib/supabase-db';
 
 interface GPXUrlRequest {
@@ -119,12 +119,12 @@ export async function POST(request: NextRequest) {
         };
 
         return NextResponse.json(response);
-      } catch (cacheError: any) {
+      } catch (cacheError: unknown) {
         console.error('❌ Failed to cache GPX:', cacheError);
         return NextResponse.json({
           success: false,
           cached: false,
-          error: `Failed to cache GPX: ${cacheError.message}`
+          error: `Failed to cache GPX: ${cacheError instanceof Error ? cacheError.message : 'Unknown error'}`
         });
       }
     }
@@ -149,26 +149,26 @@ export async function POST(request: NextRequest) {
 
       return NextResponse.json(response);
 
-    } catch (urlError: any) {
+    } catch (urlError: unknown) {
       console.error('❌ Failed to generate public URL:', urlError);
       return NextResponse.json({
         success: false,
         cached: exists,
-        error: `Failed to generate GPX URL: ${urlError.message}`
+        error: `Failed to generate GPX URL: ${urlError instanceof Error ? urlError.message : 'Unknown error'}`
       });
     }
 
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('❌ GPX URL API Error:', {
-      errorMessage: error.message,
-      errorStack: error.stack,
-      errorName: error.name
+      errorMessage: error instanceof Error ? error.message : 'Unknown error',
+      errorStack: error instanceof Error ? error.stack : undefined,
+      errorName: error instanceof Error ? error.name : 'Unknown'
     });
 
     return NextResponse.json({
       success: false,
       cached: false,
-      error: error.message
+      error: error instanceof Error ? error.message : 'Unknown error'
     }, { status: 500 });
   }
 }

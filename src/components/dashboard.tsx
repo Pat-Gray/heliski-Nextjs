@@ -106,7 +106,7 @@ export default function Dashboard() {
 
     window.addEventListener('submit-daily-plan', handleSubmitDailyPlan);
     return () => window.removeEventListener('submit-daily-plan', handleSubmitDailyPlan);
-  }, []);
+  });
 
   const { data: runs = [] } = useQuery<Run[]>({
     queryKey: ["/api/runs"],
@@ -363,11 +363,12 @@ export default function Dashboard() {
       } else {
         throw new Error(result.error || 'Unknown sync error');
       }
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('❌ CalTopo sync failed:', error);
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
       toast({
         title: "CalTopo sync failed",
-        description: `Could not sync run statuses to CalTopo: ${error.message}`,
+        description: `Could not sync run statuses to CalTopo: ${errorMessage}`,
         variant: "destructive"
       });
     }
@@ -615,7 +616,7 @@ export default function Dashboard() {
                       <Button 
                         onClick={_handleSubmitDailyPlan}
                         disabled={filteredRuns.length === 0}
-                        className="bg-blue-600 hover:bg-blue-700 hidden"
+                        className="bg-blue-600 hover:bg-blue-700 "
                       >
                         Submit Daily Plan
                       </Button> 

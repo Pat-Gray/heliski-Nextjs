@@ -17,19 +17,19 @@ interface CalTopoFeature {
   };
 }
 
-interface GPXTrack {
-  id: string;
-  title: string;
-  coordinates: number[][];
-  properties: Record<string, unknown>;
-  pointCount: number;
-  groupId?: string;
-}
 
 interface CalTopoGroup {
   id: string;
   name: string;
   color?: string;
+}
+
+interface CalTopoMapResponse {
+  state: {
+    groups?: CalTopoGroup[];
+    features?: CalTopoFeature[];
+  };
+  [key: string]: unknown;
 }
 
 
@@ -59,12 +59,23 @@ export async function POST(request: NextRequest) {
 
     // Fetch map data (GET /api/v1/map/{map_id}/since/0)
     console.log('🗺️ Fetching map data for mapId:', mapId);
-    const mapData = await caltopoRequest(
+    const mapDataResponse = await caltopoRequest(
       'GET',
       `/api/v1/map/${mapId}/since/0`,
       credentialId,
       credentialSecret
     );
+    
+    // Type guard to ensure we have the expected structure
+    if (!mapDataResponse || typeof mapDataResponse !== 'object') {
+      console.log('❌ Invalid map data response structure');
+      return NextResponse.json({ 
+        success: false, 
+        error: 'Invalid response structure from CalTopo' 
+      }, { status: 500 });
+    }
+    
+    const mapData = mapDataResponse as CalTopoMapResponse;
 
     if (!mapData) {
       console.log('❌ No map data received from CalTopo');
@@ -117,15 +128,15 @@ export async function POST(request: NextRequest) {
 
     // Extract GPX tracks (LineString features from state, per docs)
     const gpxTracks = mapData.state.features
-      .filter((feature: CalTopoFeature) => feature.geometry?.type === 'LineString')
-      .map((track: CalTopoFeature) => ({
+      ?.filter((feature: CalTopoFeature) => feature.geometry?.type === 'LineString')
+      ?.map((track: CalTopoFeature) => ({
         id: track.id,
         title: track.properties?.title || 'Unnamed Track',
         coordinates: track.geometry?.coordinates || [], // Array of [lon, lat]
         properties: track.properties, // Full props like stroke, fill, etc.
         pointCount: track.geometry?.coordinates?.length || 0, // For display
         groupId: track.properties?.folderId || undefined, // Group/folder ID
-      }));
+      })) || [];
 
     console.log('🎯 Processed GPX tracks:', gpxTracks);
     console.log('📊 Summary - Groups:', groups.length, 'Features:', gpxTracks.length);

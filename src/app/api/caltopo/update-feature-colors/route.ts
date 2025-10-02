@@ -9,6 +9,24 @@ interface UpdateColorsRequest {
   }>;
 }
 
+interface CalTopoFeature {
+  id: string;
+  properties: {
+    stroke?: string;
+    fill?: string;
+    [key: string]: unknown;
+  };
+  [key: string]: unknown;
+}
+
+interface CalTopoMapData {
+  result?: {
+    state?: {
+      features?: CalTopoFeature[];
+    };
+  };
+}
+
 const STATUS_COLORS = {
   open: '#22c55e',      // Green
   conditional: '#f97316', // Orange  
@@ -38,12 +56,14 @@ export async function POST(request: NextRequest) {
     }
 
     // 1. Get current map data
-    const mapData = await caltopoRequest(
+    const mapDataResponse = await caltopoRequest(
       'GET',
       `/api/v1/map/${mapId}/since/0`,
       credentialId,
       credentialSecret
     );
+    
+    const mapData = mapDataResponse as CalTopoMapData;
 
     // 2. Update each feature individually using the correct CalTopo API
     let updatedCount = 0;
@@ -52,7 +72,7 @@ export async function POST(request: NextRequest) {
     for (const update of featureUpdates) {
       try {
         // Find the feature in the map data - access features from result.state.features
-        const feature = mapData.result?.state?.features?.find((f: any) => f.id === update.featureId);
+        const feature = mapData.result?.state?.features?.find((f: CalTopoFeature) => f.id === update.featureId);
         
         if (!feature) {
           errors.push(`Feature ${update.featureId} not found in map`);
@@ -77,7 +97,7 @@ export async function POST(request: NextRequest) {
         };
 
         // Update individual feature using correct CalTopo API endpoint (POST, not PUT)
-        const response = await caltopoRequest(
+        await caltopoRequest(
           'POST',  // Use POST, not PUT (CalTopo doesn't support PUT)
           `/api/v1/map/${mapId}/Shape/${update.featureId}`,
           credentialId,
@@ -88,8 +108,8 @@ export async function POST(request: NextRequest) {
         updatedCount++;
         
 
-      } catch (error: any) {
-        const errorMsg = `Failed to update feature ${update.featureId}: ${error.message}`;
+      } catch (error: unknown) {
+        const errorMsg = `Failed to update feature ${update.featureId}: ${error instanceof Error ? error.message : 'Unknown error'}`;
         errors.push(errorMsg);
         console.error(`❌ ${errorMsg}`);
       }
@@ -102,10 +122,10 @@ export async function POST(request: NextRequest) {
       mapId
     });
 
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('❌ Update colors error:', error);
     return NextResponse.json(
-      { error: error.message },
+      { error: error instanceof Error ? error.message : 'Unknown error' },
       { status: 500 }
     );
   }

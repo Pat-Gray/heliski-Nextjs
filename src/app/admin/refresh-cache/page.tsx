@@ -3,7 +3,6 @@
 import { useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
 import { RefreshCw, CheckCircle, XCircle, Clock } from "lucide-react";
 import { useToast } from "@/contexts/hooks/use-toast";
 
@@ -52,11 +51,11 @@ export default function RefreshCachePage() {
           variant: "destructive"
         });
       }
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Refresh failed:', error);
       toast({
         title: "Refresh failed",
-        description: error.message,
+        description: error instanceof Error ? error.message : 'An unknown error occurred',
         variant: "destructive"
       });
     } finally {
@@ -152,7 +151,7 @@ export default function RefreshCachePage() {
         </CardHeader>
         <CardContent className="space-y-2 text-sm text-muted-foreground">
           <p>• This tool checks all CalTopo-linked runs for changes</p>
-          <p>• It compares the last update timestamp with CalTopo's "since" endpoint</p>
+          <p>• It compares the last update timestamp with CalTopo&apos;s &quot;since&quot; endpoint</p>
           <p>• Only runs with detected changes will be refreshed</p>
           <p>• GPX files are cached in Supabase Storage for fast dashboard rendering</p>
           <p>• This can be automated with a cron job calling <code>/api/cron/refresh-gpx</code></p>

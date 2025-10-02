@@ -11,7 +11,7 @@ export interface GeoJSONFeature {
   properties?: {
     name?: string;
     description?: string;
-    [key: string]: any;
+        [key: string]: unknown;
   };
 }
 
@@ -43,7 +43,6 @@ function lineStringToGPX(coordinates: number[][], options: GPXOptions = {}): str
   const trackPoints = coordinatesToTrackPoints(coordinates);
   const name = options.name || 'Track';
   const description = options.description || '';
-  const time = options.time ? options.time.toISOString() : new Date().toISOString();
   
   return `  <trk>
     <name>${name}</name>
@@ -60,10 +59,10 @@ ${trackPoints}
 function multiLineStringToGPX(coordinates: number[][][], options: GPXOptions = {}): string {
   const name = options.name || 'Track';
   const description = options.description || '';
-  const time = options.time ? options.time.toISOString() : new Date().toISOString();
+  
   
   const trackSegments = coordinates
-    .map((segment, index) => {
+    .map((segment) => {
       const trackPoints = coordinatesToTrackPoints(segment);
       return `    <trkseg>
 ${trackPoints}
@@ -94,7 +93,7 @@ export function geojsonToGPX(feature: GeoJSONFeature, options: GPXOptions = {}):
   if (geometry.type === 'LineString') {
     tracks = lineStringToGPX(geometry.coordinates, { name, description, time });
   } else if (geometry.type === 'MultiLineString') {
-    tracks = multiLineStringToGPX(geometry.coordinates, { name, description, time });
+    tracks = multiLineStringToGPX(geometry.coordinates as unknown as number[][][], { name, description, time });
   } else {
     throw new Error(`Unsupported geometry type: ${geometry.type}`);
   }

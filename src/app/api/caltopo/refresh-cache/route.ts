@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { caltopoRequest } from '../../../../utils/caltopo';
 import { supabase } from '../../../../lib/supabase-db';
-import { uploadGPX, getGPX } from '../../../../lib/supabase-storage';
+import { uploadGPX } from '../../../../lib/supabase-storage';
 import { geojsonToGPX } from '../../../../lib/geojson-to-gpx';
 
 interface RefreshCacheResponse {
@@ -15,6 +15,7 @@ interface RefreshCacheResponse {
 
 interface CalTopoFeature {
   id: string;
+  type: 'Feature';
   geometry?: {
     type: string;
     coordinates: number[] | number[][];
@@ -24,6 +25,11 @@ interface CalTopoFeature {
     description?: string;
     [key: string]: unknown;
   };
+}
+
+interface CalTopoMapResponse {
+  features?: CalTopoFeature[];
+  [key: string]: unknown;
 }
 
 export async function POST(request: NextRequest) {
@@ -111,7 +117,7 @@ export async function POST(request: NextRequest) {
           `/api/v1/map/${mapId}/since/${sinceTimestamp}`,
           credentialId,
           credentialSecret
-        );
+        ) as CalTopoMapResponse;
 
         console.log('📊 Map changes check:', {
           hasChanges: !!mapData.features && mapData.features.length > 0,
@@ -131,7 +137,7 @@ export async function POST(request: NextRequest) {
           `/api/v1/map/${mapId}/since/0`,
           credentialId,
           credentialSecret
-        );
+        ) as CalTopoMapResponse;
 
         console.log('📊 Full map data received:', {
           hasFeatures: !!fullMapData.features,
@@ -192,7 +198,17 @@ export async function POST(request: NextRequest) {
               continue;
             }
 
-            const gpxContent = geojsonToGPX(feature, {
+            // Ensure the feature has the required type property for GeoJSON
+            const geoJsonFeature = {
+              ...feature,
+              type: 'Feature' as const,
+              geometry: feature.geometry as {
+                type: 'LineString' | 'MultiLineString';
+                coordinates: number[][];
+              }
+            };
+
+            const gpxContent = geojsonToGPX(geoJsonFeature, {
               name: feature.properties?.name || `Feature ${run.caltopo_feature_id}`,
               description: feature.properties?.description || '',
               author: 'CalTopo Integration',
@@ -208,7 +224,7 @@ export async function POST(request: NextRequest) {
             const { error: updateError } = await supabase
               .from('runs')
               .update({
-                gpx_path: publicUrl,
+                gpx_path: path,
                 gpx_updated_at: updatedAt.toISOString()
               })
               .eq('id', run.id);

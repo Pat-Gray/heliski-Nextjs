@@ -125,7 +125,7 @@ export async function getSignedGPXUrl(
  * Check if GPX file exists
  */
 export async function gpxExists(mapId: string, featureId: string): Promise<boolean> {
-  const path = `gpx/${mapId}/${featureId}.gpx`;
+
   
   const { data, error } = await supabaseAdmin.storage
     .from(BUCKET_NAME)

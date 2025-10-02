@@ -1,17 +1,20 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { caltopoRequest } from '../../../../utils/caltopo';
 
-interface CalTopoMap {
+interface CalTopoFeature {
   id: string;
-  title: string;
-  accountId: string;
+  properties: {
+    class?: string;
+    title?: string;
+    accountId?: string;
+  };
 }
 
-interface CalTopoAccountResponse {
-  success: boolean;
-  maps: CalTopoMap[];
-  message?: string;
+interface CalTopoAccountData {
+  features: CalTopoFeature[];
 }
+
+
 
 export async function POST(request: NextRequest) {
   
@@ -47,11 +50,19 @@ export async function POST(request: NextRequest) {
       credentialSecret
     );
 
+    // Type guard to ensure accountData has the expected structure
+    if (!accountData || typeof accountData !== 'object' || !('features' in accountData)) {
+      console.error('❌ Invalid account data structure:', accountData);
+      return NextResponse.json({ 
+        error: 'Invalid response format from CalTopo API' 
+      }, { status: 500 });
+    }
 
+    const typedAccountData = accountData as CalTopoAccountData;
 
-    const collaborativeMaps = accountData.features
-      .filter((feature: any) => feature.properties?.class === 'CollaborativeMap')
-      .map((map: any) => ({
+    const collaborativeMaps = typedAccountData.features
+      .filter((feature: CalTopoFeature) => feature.properties?.class === 'CollaborativeMap')
+      .map((map: CalTopoFeature) => ({
         id: map.id,
         title: map.properties?.title || 'Unnamed Map',
         accountId: map.properties?.accountId,
@@ -67,28 +78,32 @@ export async function POST(request: NextRequest) {
 
     console.log('✅ Fetch Account API Success:', response);
     return NextResponse.json(response);
-  } catch (error: any) {
+  } catch (error: unknown) {
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+    const errorStack = error instanceof Error ? error.stack : undefined;
+    const errorName = error instanceof Error ? error.name : 'Unknown';
+    
     console.error('❌ Fetch Account API Error:', {
-      errorMessage: error.message,
-      errorStack: error.stack,
-      errorName: error.name,
+      errorMessage,
+      errorStack,
+      errorName,
       errorType: typeof error,
       timestamp: new Date().toISOString()
     });
 
-    if (error.message.includes('status 404')) {
+    if (errorMessage.includes('status 404')) {
       console.log('🔍 404 Error - Team not found or no admin permission');
       return NextResponse.json({
         error: `Team ID not found or service account lacks ADMIN permission. Verify team_id and permissions at https://caltopo.com/group/admin/details.`,
       }, { status: 404 });
     }
-    if (error.message.includes('Expected JSON')) {
+    if (errorMessage.includes('Expected JSON')) {
       console.log('🔍 JSON Error - Invalid response format');
       return NextResponse.json({
         error: `Invalid response from CalTopo API. Check credentials and permissions.`,
       }, { status: 500 });
     }
-    if (error.message.includes('Missing CalTopo credentials')) {
+    if (errorMessage.includes('Missing CalTopo credentials')) {
       console.log('🔍 Credentials Error - Environment variables missing');
       return NextResponse.json({
         error: 'Server configuration error: Missing CalTopo credentials in environment variables.',
@@ -96,6 +111,6 @@ export async function POST(request: NextRequest) {
     }
     
     console.log('🔍 Generic Error - Unknown error type');
-    return NextResponse.json({ error: `Failed to fetch maps: ${error.message}` }, { status: 500 });
+    return NextResponse.json({ error: `Failed to fetch maps: ${errorMessage}` }, { status: 500 });
   }
 }

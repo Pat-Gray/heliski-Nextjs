@@ -19,8 +19,8 @@ export async function caltopoRequest(
   endpoint: string, 
   credentialId: string, 
   credentialSecret: string, 
-  payload: any = null
-): Promise<any> {
+  payload: Record<string, unknown> | null = null
+): Promise<unknown> {
   // Enhanced debugging for environment and parameters
 
   // Validate credentials before proceeding
@@ -44,7 +44,7 @@ export async function caltopoRequest(
   
   
 
-  const parameters = {
+  const parameters: { [key: string]: string } = {
     id: credentialId,
     expires: expires.toString(),
     signature,
@@ -104,9 +104,12 @@ export async function caltopoRequest(
     throw new Error(`Expected JSON but received ${contentType || 'unknown content type'}: ${errorText.slice(0, 200)}`);
   }
 
-  const data = await response.json();
+  const data = await response.json() as { result?: unknown } | unknown;
   
+  // Type guard to safely access the result property
+  if (data && typeof data === 'object' && 'result' in data) {
+    return data.result;
+  }
   
-
-  return data.result || data;
+  return data;
 }
