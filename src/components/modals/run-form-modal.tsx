@@ -27,6 +27,13 @@ interface CalTopoFeature {
   title: string;
   pointCount: number;
   properties: Record<string, unknown>;
+  groupId?: string;
+}
+
+interface CalTopoGroup {
+  id: string;
+  name: string;
+  color?: string;
 }
 
 export default function RunFormModal({ preselectedSubAreaId }: RunFormModalProps) {
@@ -47,6 +54,7 @@ export default function RunFormModal({ preselectedSubAreaId }: RunFormModalProps
   
   // CalTopo linking states
   const [caltopoMapId, setCalTopoMapId] = useState<string>("");
+  const [caltopoGroupId, setCalTopoGroupId] = useState<string>("");
   const [caltopoFeatureId, setCalTopoFeatureId] = useState<string>("");
   const [_selectedCalTopoMap, setSelectedCalTopoMap] = useState<CalTopoMap | null>(null);
   const [selectedCalTopoFeature, setSelectedCalTopoFeature] = useState<CalTopoFeature | null>(null);
@@ -87,11 +95,14 @@ export default function RunFormModal({ preselectedSubAreaId }: RunFormModalProps
   });
   
 
-  // Fetch features for selected map
-  const { data: caltopoFeatures = [], isLoading: featuresLoading } = useQuery<CalTopoFeature[]>({
+  // Fetch features and groups for selected map
+  const { data: mapData, isLoading: featuresLoading } = useQuery<{
+    gpxTracks: CalTopoFeature[];
+    groups: CalTopoGroup[];
+  }>({
     queryKey: ["/api/caltopo/features", caltopoMapId],
     queryFn: async () => {
-      if (!caltopoMapId) return [];
+      if (!caltopoMapId) return { gpxTracks: [], groups: [] };
       
       const response = await fetch('/api/caltopo/fetch-map', {
         method: 'POST',
@@ -100,10 +111,21 @@ export default function RunFormModal({ preselectedSubAreaId }: RunFormModalProps
       });
       if (!response.ok) throw new Error('Failed to fetch features');
       const data = await response.json();
-      return data.gpxTracks || [];
+      return {
+        gpxTracks: data.gpxTracks || [],
+        groups: data.groups || []
+      };
     },
     enabled: !!caltopoMapId
   });
+
+  const caltopoFeatures = mapData?.gpxTracks || [];
+  const caltopoGroups = mapData?.groups || [];
+  
+  // Filter features by selected group
+  const filteredFeatures = caltopoGroupId && caltopoGroupId !== "all"
+    ? caltopoFeatures.filter(feature => feature.groupId === caltopoGroupId)
+    : caltopoFeatures;
 
   const createRunMutation = useMutation({
     mutationFn: async (runData: {
@@ -200,7 +222,13 @@ export default function RunFormModal({ preselectedSubAreaId }: RunFormModalProps
 
     // Validate CalTopo linking (required)
     if (!caltopoMapId || !caltopoFeatureId) {
-      toast({ title: "Please select both a map and feature for CalTopo linking", variant: "destructive" });
+      toast({ title: "Please select a map and feature for CalTopo linking", variant: "destructive" });
+      return;
+    }
+    
+    // Validate group selection if groups are available
+    if (caltopoGroups.length > 0 && (!caltopoGroupId || caltopoGroupId === "")) {
+      toast({ title: "Please select a folder/group to organize the features", variant: "destructive" });
       return;
     }
     
@@ -271,6 +299,7 @@ export default function RunFormModal({ preselectedSubAreaId }: RunFormModalProps
     setAdditionalPhotos([]);
     setUploadProgress({});
     setCalTopoMapId("");
+    setCalTopoGroupId("");
     setCalTopoFeatureId("");
     setSelectedCalTopoMap(null);
     setSelectedCalTopoFeature(null);
@@ -467,6 +496,7 @@ export default function RunFormModal({ preselectedSubAreaId }: RunFormModalProps
                   value={caltopoMapId} 
                   onValueChange={(mapId) => {
                     setCalTopoMapId(mapId);
+                    setCalTopoGroupId("");
                     setCalTopoFeatureId("");
                     setSelectedCalTopoMap(null);
                     setSelectedCalTopoFeature(null);
@@ -497,6 +527,46 @@ export default function RunFormModal({ preselectedSubAreaId }: RunFormModalProps
                 </Select>
               </div>
 
+              {/* Group Selection */}
+              {caltopoMapId && (
+                <div>
+                  <label className="text-sm font-medium">Select Folder/Group *</label>
+                  <Select 
+                    value={caltopoGroupId} 
+                    onValueChange={(groupId) => {
+                      setCalTopoGroupId(groupId);
+                      setCalTopoFeatureId(""); // Reset feature selection when group changes
+                      setSelectedCalTopoFeature(null);
+                    }}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Choose a folder/group" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {featuresLoading ? (
+                        <div className="p-2 text-sm text-muted-foreground">Loading groups...</div>
+                      ) : caltopoGroups.length === 0 ? (
+                        <div className="p-2 text-sm text-muted-foreground">No groups available - showing all features</div>
+                      ) : (
+                        <>
+                          <SelectItem value="all">All features</SelectItem>
+                          {caltopoGroups.map((group) => (
+                            <SelectItem key={group.id} value={group.id}>
+                              {group.name}
+                            </SelectItem>
+                          ))}
+                        </>
+                      )}
+                    </SelectContent>
+                  </Select>
+                  {caltopoGroups.length === 0 && (
+                    <p className="text-xs text-muted-foreground mt-1">
+                      This map doesn&apos;t have organized groups. All features will be shown.
+                    </p>
+                  )}
+                </div>
+              )}
+
               {/* Feature Selection */}
               {caltopoMapId && (
                 <div>
@@ -505,7 +575,7 @@ export default function RunFormModal({ preselectedSubAreaId }: RunFormModalProps
                     value={caltopoFeatureId} 
                     onValueChange={(featureId) => {
                       setCalTopoFeatureId(featureId);
-                      const feature = caltopoFeatures.find(f => f.id === featureId);
+                      const feature = filteredFeatures.find(f => f.id === featureId);
                       setSelectedCalTopoFeature(feature || null);
                     }}
                   >
@@ -515,12 +585,14 @@ export default function RunFormModal({ preselectedSubAreaId }: RunFormModalProps
                     <SelectContent>
                       {featuresLoading ? (
                         <div className="p-2 text-sm text-muted-foreground">Loading features...</div>
-                      ) : caltopoFeatures.length === 0 ? (
-                        <div className="p-2 text-sm text-muted-foreground">No features available</div>
+                      ) : filteredFeatures.length === 0 ? (
+                        <div className="p-2 text-sm text-muted-foreground">
+                          {caltopoGroupId ? "No features in selected group" : "No features available"}
+                        </div>
                       ) : (
-                        caltopoFeatures.map((feature) => (
+                        filteredFeatures.map((feature) => (
                           <SelectItem key={feature.id} value={feature.id}>
-                            {feature.title} ({feature.pointCount} points)
+                            {feature.title} 
                           </SelectItem>
                         ))
                       )}
@@ -538,9 +610,7 @@ export default function RunFormModal({ preselectedSubAreaId }: RunFormModalProps
                       Selected: {selectedCalTopoFeature.title}
                     </span>
                   </div>
-                  <p className="text-xs text-green-600 mt-1">
-                    {selectedCalTopoFeature.pointCount} GPS points • Will be cached automatically
-                  </p>
+                
                 </div>
               )}
             </div>
@@ -662,6 +732,7 @@ export default function RunFormModal({ preselectedSubAreaId }: RunFormModalProps
                 !preselectedSubAreaId ||
                 !caltopoMapId ||
                 !caltopoFeatureId ||
+                (caltopoGroups.length > 0 && (!caltopoGroupId || caltopoGroupId === "")) ||
                 isAnyFileUploading
               }
             >
