@@ -199,10 +199,7 @@ export async function createRun(run: {
   // Add CalTopo fields
   caltopoMapId?: string | null;
   caltopoFeatureId?: string | null;
-  gpxStoragePath?: string | null;
   gpxUpdatedAt?: Date | null;
-  gpxChecksum?: string | null;
-  gpxSource?: string;
 }) {
   // Get the next run number for this sub-area if not provided
   let runNumber = run.runNumber;
@@ -238,10 +235,7 @@ export async function createRun(run: {
     // Add CalTopo fields
     caltopo_map_id: run.caltopoMapId, // Convert caltopoMapId to caltopo_map_id
     caltopo_feature_id: run.caltopoFeatureId, // Convert caltopoFeatureId to caltopo_feature_id
-    gpx_storage_path: run.gpxStoragePath, // Convert gpxStoragePath to gpx_storage_path
     gpx_updated_at: run.gpxUpdatedAt, // Convert gpxUpdatedAt to gpx_updated_at
-    gpx_checksum: run.gpxChecksum, // Convert gpxChecksum to gpx_checksum
-    gpx_source: run.gpxSource, // Convert gpxSource to gpx_source
   };
 
   console.log('🔄 Creating run with data:', dbData);
@@ -328,10 +322,7 @@ export async function updateRun(id: string, updates: Partial<{
   // CalTopo integration fields
   caltopoMapId: string | null;
   caltopoFeatureId: string | null;
-  gpxStoragePath: string | null;
   gpxUpdatedAt: Date | null;
-  gpxChecksum: string | null;
-  gpxSource: string | null;
 }>) {
   console.log('🔄 Updating run in database:', { id, updates });
   
@@ -354,10 +345,7 @@ export async function updateRun(id: string, updates: Partial<{
   // CalTopo integration fields
   if (updates.caltopoMapId !== undefined) dbUpdates.caltopo_map_id = updates.caltopoMapId;
   if (updates.caltopoFeatureId !== undefined) dbUpdates.caltopo_feature_id = updates.caltopoFeatureId;
-  if (updates.gpxStoragePath !== undefined) dbUpdates.gpx_storage_path = updates.gpxStoragePath;
   if (updates.gpxUpdatedAt !== undefined) dbUpdates.gpx_updated_at = updates.gpxUpdatedAt;
-  if (updates.gpxChecksum !== undefined) dbUpdates.gpx_checksum = updates.gpxChecksum;
-  if (updates.gpxSource !== undefined) dbUpdates.gpx_source = updates.gpxSource;
   
   console.log('🔄 Converted updates for database:', dbUpdates);
   

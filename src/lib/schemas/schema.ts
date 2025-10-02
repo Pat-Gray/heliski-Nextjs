@@ -35,10 +35,7 @@ export const runs = pgTable("runs", {
   // CalTopo integration fields
   caltopoMapId: varchar("caltopo_map_id"), // CalTopo map ID
   caltopoFeatureId: varchar("caltopo_feature_id"), // CalTopo feature ID
-  gpxStoragePath: text("gpx_storage_path"), // Supabase storage path: gpx/{mapId}/{featureId}.gpx
   gpxUpdatedAt: timestamp("gpx_updated_at"), // When GPX was last cached
-  gpxChecksum: text("gpx_checksum"), // SHA-256 checksum of cached GPX
-  gpxSource: text("gpx_source").default("caltopo"), // 'caltopo' | 'manual'
   lastUpdated: timestamp("last_updated").defaultNow(),
   createdAt: timestamp("created_at").defaultNow(),
 });
@@ -97,10 +94,7 @@ export const insertRunSchema = createInsertSchema(runs).omit({
   // CalTopo integration fields
   caltopoMapId: z.string().nullable().optional(),
   caltopoFeatureId: z.string().nullable().optional(),
-  gpxStoragePath: z.string().nullable().optional(),
   gpxUpdatedAt: z.date().nullable().optional(),
-  gpxChecksum: z.string().nullable().optional(),
-  gpxSource: z.enum(["caltopo", "manual"]).optional().default("caltopo"),
 });
 
 // Schema for partial updates (without strict validation)
@@ -122,10 +116,7 @@ export const updateRunSchema = z.object({
   // CalTopo integration fields
   caltopoMapId: z.string().nullable().optional(),
   caltopoFeatureId: z.string().nullable().optional(),
-  gpxStoragePath: z.string().nullable().optional(),
   gpxUpdatedAt: z.date().nullable().optional(),
-  gpxChecksum: z.string().nullable().optional(),
-  gpxSource: z.enum(["caltopo", "manual"]).optional(),
 });
 
 export const insertDailyPlanSchema = createInsertSchema(dailyPlans).omit({

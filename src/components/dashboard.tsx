@@ -100,6 +100,7 @@ export default function Dashboard() {
   // Listen for submit daily plan event from app-layout
   useEffect(() => {
     const handleSubmitDailyPlan = () => {
+      console.log('📋 Submit Daily Plan event received from app-layout');
       _handleSubmitDailyPlan();
     };
 
@@ -399,21 +400,6 @@ export default function Dashboard() {
         description: "All current run statuses and comments have been saved as a structured snapshot."
       });
       // Set print data and trigger print
-      setPrintData({
-        areas,
-        subAreas,
-        filteredRuns,
-        selectedAreas,
-        currentDate: currentDate || new Date().toLocaleDateString('en-US', { 
-          year: 'numeric', 
-          month: 'long', 
-          day: 'numeric' 
-        }),
-        greenCount,
-        orangeCount,
-        redCount,
-      });
-      
       const printData = {
         areas,
         subAreas,
@@ -432,31 +418,19 @@ export default function Dashboard() {
       console.log('🖨️ Setting print data:', printData);
       setPrintData(printData);
       
-      // Multiple attempts to trigger print to ensure it works
-      const attemptPrint = (attempt = 1) => {
-        console.log(`🖨️ Print attempt ${attempt}...`);
+      // Single print attempt with proper timing
+      setTimeout(() => {
+        console.log('🖨️ Triggering print...');
         try {
           triggerPrint();
           console.log('✅ Print triggered successfully');
         } catch (error) {
-          console.error(`❌ Print attempt ${attempt} failed:`, error);
-          if (attempt < 3) {
-            setTimeout(() => attemptPrint(attempt + 1), 500);
-          } else {
-            console.error('❌ All print attempts failed');
-            // Fallback: try direct window.print()
-            setTimeout(() => {
-              console.log('🖨️ Fallback: trying window.print() directly...');
-              window.print();
-            }, 1000);
-          }
+          console.error('❌ Print trigger failed:', error);
+          // Fallback: try direct window.print()
+          console.log('🖨️ Fallback: trying window.print() directly...');
+          window.print();
         }
-      };
-      
-      // Start print attempts with increasing delays - give time for setPrintData to complete
-      setTimeout(() => attemptPrint(1), 1000);
-      setTimeout(() => attemptPrint(2), 2000);
-      setTimeout(() => attemptPrint(3), 3500);
+      }, 500); // Single delay to ensure print data is set
 
       // Sync CalTopo styles after successful daily plan submission
       syncCalTopoStyles();
@@ -490,7 +464,9 @@ export default function Dashboard() {
   }, []);
   
   const _handleSubmitDailyPlan = async () => {
+    console.log('📋 _handleSubmitDailyPlan called');
     if (filteredRuns.length === 0) {
+      console.log('📋 No runs available, showing error toast');
       toast({ 
         title: "No runs available", 
         description: "Cannot create daily plan without runs",
@@ -624,7 +600,7 @@ export default function Dashboard() {
             {/* Area Selection */}
             <div className="mb-6">
               <div className="flex items-center justify-between mb-3">
-                <h3 className="text-lg font-semibold">Area Selection</h3>
+                
                 <div className="flex items-center space-x-2">
                   <Button 
                     onClick={() => setShowAreaSelection(!showAreaSelection)}
@@ -639,10 +615,10 @@ export default function Dashboard() {
                       <Button 
                         onClick={_handleSubmitDailyPlan}
                         disabled={filteredRuns.length === 0}
-                        className="bg-blue-600 hover:bg-blue-700"
+                        className="bg-blue-600 hover:bg-blue-700 hidden"
                       >
                         Submit Daily Plan
-                      </Button>
+                      </Button> 
                     </>
                   )}
                 </div>

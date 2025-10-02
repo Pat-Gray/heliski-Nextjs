@@ -1,11 +1,10 @@
 // my-app/src/app/admin/test-color-change/page.tsx
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState} from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -334,8 +333,8 @@ export default function TestColorChangePage() {
         <CardContent className="space-y-2 text-sm">
           <p>1. <strong>Select a map</strong> from the dropdown above</p>
           <p>2. <strong>Choose a color</strong> (Open/Green, Conditional/Orange, Closed/Red)</p>
-          <p>3. <strong>Select features</strong> by clicking on them (they'll highlight in blue)</p>
-          <p>4. <strong>Click "Update Colors"</strong> to change the selected features</p>
+          <p>3. <strong>Select features</strong> by clicking on them (they&apos;ll highlight in blue)</p>
+          <p>4. <strong>Click &quot;Update Colors&quot;</strong> to change the selected features</p>
           <p>5. <strong>Check CalTopo.com</strong> to see the color changes on the actual map</p>
         </CardContent>
       </Card>

@@ -143,7 +143,6 @@ export default function RunFormModal({ preselectedSubAreaId }: RunFormModalProps
       additionalPhotos: string[] | null;
       caltopoMapId: string;
       caltopoFeatureId: string;
-      gpxSource: string;
     }) => {
       const response = await apiRequest("POST", "/api/runs", runData);
       if (!response.ok) {
@@ -247,7 +246,6 @@ export default function RunFormModal({ preselectedSubAreaId }: RunFormModalProps
       additionalPhotos: additionalPhotos.length > 0 ? additionalPhotos : null,
       caltopoMapId: caltopoMapId,
       caltopoFeatureId: caltopoFeatureId,
-      gpxSource: 'caltopo',
     });
   };
 

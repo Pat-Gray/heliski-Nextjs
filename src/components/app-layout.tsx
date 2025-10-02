@@ -86,8 +86,12 @@ export function AppLayout({ children }: AppLayoutProps) {
   };
 
   const handleSubmitDailyPlan = () => {
+    console.log('📋 Submit Daily Plan button clicked in app-layout');
+    console.log('📋 Selected areas:', selectedAreas);
+    console.log('📋 Selected areas size:', selectedAreas.size);
     const event = new CustomEvent('submit-daily-plan');
     window.dispatchEvent(event);
+    console.log('📋 Submit Daily Plan event dispatched');
   };
 
   const handlePrint = () => {
@@ -234,6 +238,7 @@ export function AppLayout({ children }: AppLayoutProps) {
                 disabled={selectedAreas.size === 0}
                 data-testid="button-submit-daily-plan"
                 size="sm"
+                title={selectedAreas.size === 0 ? "Select areas first" : "Submit daily plan"}
               >
                 <Plus className="w-4 h-4 mr-2" />
                 Submit Daily Plan

@@ -92,11 +92,8 @@ export async function POST(request: NextRequest) {
         const { error: updateError } = await supabase
           .from('runs')
           .update({
-            gpx_path: publicUrl, // Store public URL in gpx_path for compatibility
-            gpx_storage_path: publicUrl, // Store the public URL instead of storage path
-            gpx_checksum: existingGPX.checksum,
+            gpx_path: publicUrl, // Store public URL in gpx_path
             gpx_updated_at: existingGPX.updatedAt.toISOString(),
-            gpx_source: 'caltopo'
           })
           .eq('id', runId);
         
@@ -280,13 +277,10 @@ export async function POST(request: NextRequest) {
         const { error: updateError } = await supabase
           .from('runs')
           .update({
-            gpx_path: publicUrl, // Store public URL in gpx_path for compatibility
+            gpx_path: publicUrl, // Store public URL in gpx_path
             caltopo_map_id: mapId,
             caltopo_feature_id: featureId,
-            gpx_storage_path: publicUrl, // Store the public URL instead of storage path
-            gpx_checksum: checksum,
             gpx_updated_at: updatedAt.toISOString(),
-            gpx_source: 'caltopo'
           })
           .eq('id', runId);
       

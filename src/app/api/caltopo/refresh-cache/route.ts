@@ -47,7 +47,7 @@ export async function POST(request: NextRequest) {
     // Get all runs that are linked to CalTopo
     const { data: linkedRuns, error: runsError } = await supabase
       .from('runs')
-      .select('id, name, caltopo_map_id, caltopo_feature_id, gpx_checksum, gpx_updated_at')
+      .select('id, name, caltopo_map_id, caltopo_feature_id, gpx_updated_at')
       .not('caltopo_map_id', 'is', null)
       .not('caltopo_feature_id', 'is', null);
 
@@ -171,10 +171,12 @@ export async function POST(request: NextRequest) {
               continue;
             }
 
-            // Check if feature has changed by comparing with existing GPX
-            const existingGPX = await getGPX(run.caltopo_map_id, run.caltopo_feature_id);
-            if (existingGPX && run.gpx_checksum === existingGPX.checksum) {
-              console.log(`✅ GPX unchanged for run ${run.id.substring(0, 8)}, skipping`);
+            // Check if GPX was recently updated (within last hour)
+            const lastUpdated = run.gpx_updated_at ? new Date(run.gpx_updated_at) : null;
+            const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000);
+            
+            if (lastUpdated && lastUpdated > oneHourAgo) {
+              console.log(`✅ GPX recently updated for run ${run.id.substring(0, 8)}, skipping`);
               skipped++;
               continue;
             }
@@ -206,10 +208,8 @@ export async function POST(request: NextRequest) {
             const { error: updateError } = await supabase
               .from('runs')
               .update({
-                gpx_storage_path: path,
-                gpx_checksum: checksum,
-                gpx_updated_at: updatedAt.toISOString(),
-                gpx_source: 'caltopo'
+                gpx_path: publicUrl,
+                gpx_updated_at: updatedAt.toISOString()
               })
               .eq('id', run.id);
 

@@ -37,7 +37,7 @@ export async function POST(request: NextRequest) {
     // Get run data
     const { data: runData, error: runError } = await supabase
       .from('runs')
-      .select('id, name, caltopo_map_id, caltopo_feature_id, gpx_storage_path, gpx_source')
+      .select('id, name, caltopo_map_id, caltopo_feature_id, gpx_path')
       .eq('id', runId)
       .single();
 
@@ -54,8 +54,7 @@ export async function POST(request: NextRequest) {
       runId: run.id,
       name: run.name,
       hasCalTopoLink: !!(run.caltopo_map_id && run.caltopo_feature_id),
-      hasStoragePath: !!run.gpx_storage_path,
-      gpxSource: run.gpx_source
+      hasGpxPath: !!run.gpx_path
     });
 
     // Check if run is linked to CalTopo
@@ -68,17 +67,17 @@ export async function POST(request: NextRequest) {
     }
 
     // Check if we already have a URL stored (public or signed)
-    if (run.gpx_storage_path) {
+    if (run.gpx_path) {
       console.log('✅ Using stored URL:', {
         runId: run.id,
-        urlLength: run.gpx_storage_path.length,
-        urlPreview: run.gpx_storage_path.substring(0, 100) + '...',
-        isPublicUrl: run.gpx_storage_path.includes('/public/')
+        urlLength: run.gpx_path.length,
+        urlPreview: run.gpx_path.substring(0, 100) + '...',
+        isPublicUrl: run.gpx_path.includes('/public/')
       });
 
       const response: GPXUrlResponse = {
         success: true,
-        gpxUrl: run.gpx_storage_path,
+        gpxUrl: run.gpx_path,
         cached: true
       };
 
