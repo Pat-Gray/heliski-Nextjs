@@ -3,7 +3,7 @@
 import { useState, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { Upload, File, Image, MapPin } from "lucide-react";
-import { useToast } from "@/hooks/use-toast";
+import { useToast } from "@/contexts/hooks/use-toast";
 import { generateSupabaseFilePath, uploadFile } from "@/lib/file-upload";
 
 interface FileUploadProps {

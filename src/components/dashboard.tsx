@@ -8,7 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Mountain,CheckCircle, MapPin, GripVertical } from "lucide-react";
-import { useToast } from "@/hooks/use-toast";
+import { useToast } from "@/contexts/hooks/use-toast";
 import { apiRequest, queryFn } from "@/lib/queryClient";
 import RunDetailView from "@/components/run-detail-view";
 import RunDetailSideModal from "@/components/modals/run-detail-side-modal";
@@ -96,6 +96,16 @@ export default function Dashboard() {
     Object.values(updateTimeoutsRef.current).forEach(timeout => clearTimeout(timeout));
     updateTimeoutsRef.current = {};
   }, [selectedAreas]);
+
+  // Listen for submit daily plan event from app-layout
+  useEffect(() => {
+    const handleSubmitDailyPlan = () => {
+      _handleSubmitDailyPlan();
+    };
+
+    window.addEventListener('submit-daily-plan', handleSubmitDailyPlan);
+    return () => window.removeEventListener('submit-daily-plan', handleSubmitDailyPlan);
+  }, []);
 
   const { data: runs = [] } = useQuery<Run[]>({
     queryKey: ["/api/runs"],
@@ -307,6 +317,60 @@ export default function Dashboard() {
       }
     }, 300); // Very fast auto-save for seamless experience
   };
+  // Sync CalTopo styles function
+  const syncCalTopoStyles = async () => {
+    try {
+      console.log('🎨 Syncing CalTopo styles...');
+      
+      const response = await fetch('/api/caltopo/sync-styles', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          runIds: filteredRuns.map(run => run.id)
+        })
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+      }
+
+      const result = await response.json();
+      
+      console.log('✅ CalTopo sync result:', result);
+      
+      if (result.success) {
+        const { updated, skippedUnlinked, failed, mapsUpdated } = result;
+        
+        let message = `CalTopo sync completed: ${updated} runs updated`;
+        if (skippedUnlinked.length > 0) {
+          message += `, ${skippedUnlinked.length} runs skipped (not linked to CalTopo)`;
+        }
+        if (failed.length > 0) {
+          message += `, ${failed.length} runs failed to sync`;
+        }
+        if (mapsUpdated.length > 0) {
+          message += `, ${mapsUpdated.length} maps updated`;
+        }
+        
+        toast({
+          title: "CalTopo sync completed",
+          description: message,
+          variant: failed.length > 0 ? "destructive" : "default"
+        });
+      } else {
+        throw new Error(result.error || 'Unknown sync error');
+      }
+    } catch (error: any) {
+      console.error('❌ CalTopo sync failed:', error);
+      toast({
+        title: "CalTopo sync failed",
+        description: `Could not sync run statuses to CalTopo: ${error.message}`,
+        variant: "destructive"
+      });
+    }
+  };
   
   const submitDailyPlanMutation = useMutation({
     mutationFn: async (planData: InsertDailyPlan) => {
@@ -393,6 +457,9 @@ export default function Dashboard() {
       setTimeout(() => attemptPrint(1), 1000);
       setTimeout(() => attemptPrint(2), 2000);
       setTimeout(() => attemptPrint(3), 3500);
+
+      // Sync CalTopo styles after successful daily plan submission
+      syncCalTopoStyles();
     },
   });
   
@@ -567,7 +634,16 @@ export default function Dashboard() {
                     {showAreaSelection ? "Hide Areas" : "Show Areas"}
                   </Button>
                   {selectedAreas.size > 0 && (
-                    <DashboardFilters onApplyRiskAssessment={handleAvalancheRiskAssessment} />
+                    <>
+                      <DashboardFilters onApplyRiskAssessment={handleAvalancheRiskAssessment} />
+                      <Button 
+                        onClick={_handleSubmitDailyPlan}
+                        disabled={filteredRuns.length === 0}
+                        className="bg-blue-600 hover:bg-blue-700"
+                      >
+                        Submit Daily Plan
+                      </Button>
+                    </>
                   )}
                 </div>
               </div>
