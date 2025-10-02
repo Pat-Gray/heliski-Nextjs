@@ -13,6 +13,7 @@ import { Mountain, AlertTriangle, MapPin, Edit2, Save, X, Eye, Plus, Upload } fr
 import Image from 'next/image';
 import type { Run, SubArea } from '@/lib/schemas/schema';
 import GpxUpdateButton from './gpx-update-button';
+import GPXViewer from './gpx-viewer';
 
 interface RunDetailViewProps {
   runId: string | null;
@@ -203,7 +204,7 @@ export default function RunDetailView({ runId }: RunDetailViewProps) {
               runId={selectedRun.id} 
               currentGpxPath={selectedRun.gpxPath}
             />
-            {selectedRun.gpxPath ? (
+            {(selectedRun.gpxPath || (selectedRun.caltopoMapId && selectedRun.caltopoFeatureId)) ? (
               <Button
                 variant="outline"
                 size="sm"
@@ -212,6 +213,9 @@ export default function RunDetailView({ runId }: RunDetailViewProps) {
               >
                 <MapPin className="h-4 w-4" />
                 {showMap ? 'Hide Map' : 'View Map'}
+                {selectedRun.caltopoMapId && selectedRun.caltopoFeatureId && !selectedRun.gpxPath && (
+                  <span className="ml-1 text-xs text-blue-600">• CalTopo</span>
+                )}
               </Button>
             ) : (
               <Button
@@ -274,6 +278,10 @@ export default function RunDetailView({ runId }: RunDetailViewProps) {
               subAreaId={selectedRun.subAreaId || ''}
               selectedRunId={selectedRun.id}
             />
+          </div>
+        ) : showMap && (selectedRun.caltopoMapId && selectedRun.caltopoFeatureId) ? (
+          <div className="h-full">
+            <GPXViewer runId={selectedRun.id} className="h-full" />
           </div>
         ) : (
           <div className="h-full overflow-y-auto p-4 space-y-4">

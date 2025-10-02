@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import Map, { Source, Layer, MapRef } from 'react-map-gl/mapbox';
 import type { FeatureCollection, LineString, Point } from 'geojson';
-import { useRunsForArea } from '@/hooks/use-runs-for-area';
+import { useRunsForArea } from '@/contexts/hooks/use-runs-for-area';
 import { parseGPXToGeoJSON } from '@/utils/gpx-parser';
 import { Loader2, MapPin, AlertTriangle } from 'lucide-react';
 import { Button } from '@/components/ui/button';

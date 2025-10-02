@@ -8,7 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Mountain,CheckCircle, MapPin, GripVertical } from "lucide-react";
-import { useToast } from "@/hooks/use-toast";
+import { useToast } from "@/contexts/hooks/use-toast";
 import { apiRequest, queryFn } from "@/lib/queryClient";
 import RunDetailView from "@/components/run-detail-view";
 import RunDetailSideModal from "@/components/modals/run-detail-side-modal";
@@ -96,6 +96,17 @@ export default function Dashboard() {
     Object.values(updateTimeoutsRef.current).forEach(timeout => clearTimeout(timeout));
     updateTimeoutsRef.current = {};
   }, [selectedAreas]);
+
+  // Listen for submit daily plan event from app-layout
+  useEffect(() => {
+    const handleSubmitDailyPlan = () => {
+      console.log('📋 Submit Daily Plan event received from app-layout');
+      _handleSubmitDailyPlan();
+    };
+
+    window.addEventListener('submit-daily-plan', handleSubmitDailyPlan);
+    return () => window.removeEventListener('submit-daily-plan', handleSubmitDailyPlan);
+  });
 
   const { data: runs = [] } = useQuery<Run[]>({
     queryKey: ["/api/runs"],
@@ -307,6 +318,61 @@ export default function Dashboard() {
       }
     }, 300); // Very fast auto-save for seamless experience
   };
+  // Sync CalTopo styles function
+  const syncCalTopoStyles = async () => {
+    try {
+      console.log('🎨 Syncing CalTopo styles...');
+      
+      const response = await fetch('/api/caltopo/sync-styles', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          runIds: filteredRuns.map(run => run.id)
+        })
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+      }
+
+      const result = await response.json();
+      
+      console.log('✅ CalTopo sync result:', result);
+      
+      if (result.success) {
+        const { updated, skippedUnlinked, failed, mapsUpdated } = result;
+        
+        let message = `CalTopo sync completed: ${updated} runs updated`;
+        if (skippedUnlinked.length > 0) {
+          message += `, ${skippedUnlinked.length} runs skipped (not linked to CalTopo)`;
+        }
+        if (failed.length > 0) {
+          message += `, ${failed.length} runs failed to sync`;
+        }
+        if (mapsUpdated.length > 0) {
+          message += `, ${mapsUpdated.length} maps updated`;
+        }
+        
+        toast({
+          title: "CalTopo sync completed",
+          description: message,
+          variant: failed.length > 0 ? "destructive" : "default"
+        });
+      } else {
+        throw new Error(result.error || 'Unknown sync error');
+      }
+    } catch (error: unknown) {
+      console.error('❌ CalTopo sync failed:', error);
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      toast({
+        title: "CalTopo sync failed",
+        description: `Could not sync run statuses to CalTopo: ${errorMessage}`,
+        variant: "destructive"
+      });
+    }
+  };
   
   const submitDailyPlanMutation = useMutation({
     mutationFn: async (planData: InsertDailyPlan) => {
@@ -335,21 +401,6 @@ export default function Dashboard() {
         description: "All current run statuses and comments have been saved as a structured snapshot."
       });
       // Set print data and trigger print
-      setPrintData({
-        areas,
-        subAreas,
-        filteredRuns,
-        selectedAreas,
-        currentDate: currentDate || new Date().toLocaleDateString('en-US', { 
-          year: 'numeric', 
-          month: 'long', 
-          day: 'numeric' 
-        }),
-        greenCount,
-        orangeCount,
-        redCount,
-      });
-      
       const printData = {
         areas,
         subAreas,
@@ -368,31 +419,22 @@ export default function Dashboard() {
       console.log('🖨️ Setting print data:', printData);
       setPrintData(printData);
       
-      // Multiple attempts to trigger print to ensure it works
-      const attemptPrint = (attempt = 1) => {
-        console.log(`🖨️ Print attempt ${attempt}...`);
+      // Single print attempt with proper timing
+      setTimeout(() => {
+        console.log('🖨️ Triggering print...');
         try {
           triggerPrint();
           console.log('✅ Print triggered successfully');
         } catch (error) {
-          console.error(`❌ Print attempt ${attempt} failed:`, error);
-          if (attempt < 3) {
-            setTimeout(() => attemptPrint(attempt + 1), 500);
-          } else {
-            console.error('❌ All print attempts failed');
-            // Fallback: try direct window.print()
-            setTimeout(() => {
-              console.log('🖨️ Fallback: trying window.print() directly...');
-              window.print();
-            }, 1000);
-          }
+          console.error('❌ Print trigger failed:', error);
+          // Fallback: try direct window.print()
+          console.log('🖨️ Fallback: trying window.print() directly...');
+          window.print();
         }
-      };
-      
-      // Start print attempts with increasing delays - give time for setPrintData to complete
-      setTimeout(() => attemptPrint(1), 1000);
-      setTimeout(() => attemptPrint(2), 2000);
-      setTimeout(() => attemptPrint(3), 3500);
+      }, 500); // Single delay to ensure print data is set
+
+      // Sync CalTopo styles after successful daily plan submission
+      syncCalTopoStyles();
     },
   });
   
@@ -423,7 +465,9 @@ export default function Dashboard() {
   }, []);
   
   const _handleSubmitDailyPlan = async () => {
+    console.log('📋 _handleSubmitDailyPlan called');
     if (filteredRuns.length === 0) {
+      console.log('📋 No runs available, showing error toast');
       toast({ 
         title: "No runs available", 
         description: "Cannot create daily plan without runs",
@@ -557,7 +601,7 @@ export default function Dashboard() {
             {/* Area Selection */}
             <div className="mb-6">
               <div className="flex items-center justify-between mb-3">
-                <h3 className="text-lg font-semibold">Area Selection</h3>
+                
                 <div className="flex items-center space-x-2">
                   <Button 
                     onClick={() => setShowAreaSelection(!showAreaSelection)}
@@ -567,7 +611,16 @@ export default function Dashboard() {
                     {showAreaSelection ? "Hide Areas" : "Show Areas"}
                   </Button>
                   {selectedAreas.size > 0 && (
-                    <DashboardFilters onApplyRiskAssessment={handleAvalancheRiskAssessment} />
+                    <>
+                      <DashboardFilters onApplyRiskAssessment={handleAvalancheRiskAssessment} />
+                      <Button 
+                        onClick={_handleSubmitDailyPlan}
+                        disabled={filteredRuns.length === 0}
+                        className="bg-blue-600 hover:bg-blue-700 "
+                      >
+                        Submit Daily Plan
+                      </Button> 
+                    </>
                   )}
                 </div>
               </div>

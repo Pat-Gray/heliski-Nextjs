@@ -6,14 +6,34 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
-import { Plus, Upload, X } from "lucide-react";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { useToast } from "@/hooks/use-toast";
+import { Plus, Upload, X, MapPin } from "lucide-react";
+import { useMutation, useQueryClient, useQuery } from "@tanstack/react-query";
+import { useToast } from "@/contexts/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
 import FileUpload from "@/components/file-upload";
 
 interface RunFormModalProps {
   preselectedSubAreaId?: string;
+}
+
+interface CalTopoMap {
+  id: string;
+  title: string;
+  accountId: string;
+}
+
+interface CalTopoFeature {
+  id: string;
+  title: string;
+  pointCount: number;
+  properties: Record<string, unknown>;
+  groupId?: string;
+}
+
+interface CalTopoGroup {
+  id: string;
+  name: string;
+  color?: string;
 }
 
 export default function RunFormModal({ preselectedSubAreaId }: RunFormModalProps) {
@@ -22,17 +42,22 @@ export default function RunFormModal({ preselectedSubAreaId }: RunFormModalProps
   const [runDescription, setRunDescription] = useState("");
   const [runNotes, setRunNotes] = useState("");
   const [aspect, setAspect] = useState("");
-  const [averageAngle, setAverageAngle] = useState("");
   const [elevationMin, setElevationMin] = useState("");
   const [elevationMax, setElevationMax] = useState("");
   const [status, setStatus] = useState("open");
   const [statusComment, setStatusComment] = useState("");
   
   // File states - these will store the uploaded file URLs
-  const [gpxPath, setGpxPath] = useState("");
   const [runPhoto, setRunPhoto] = useState("");
   const [avalanchePhoto, setAvalanchePhoto] = useState("");
   const [additionalPhotos, setAdditionalPhotos] = useState<string[]>([]);
+  
+  // CalTopo linking states
+  const [caltopoMapId, setCalTopoMapId] = useState<string>("");
+  const [caltopoGroupId, setCalTopoGroupId] = useState<string>("");
+  const [caltopoFeatureId, setCalTopoFeatureId] = useState<string>("");
+  const [_selectedCalTopoMap, setSelectedCalTopoMap] = useState<CalTopoMap | null>(null);
+  const [selectedCalTopoFeature, setSelectedCalTopoFeature] = useState<CalTopoFeature | null>(null);
   
   // Upload states for tracking upload progress
   const [uploadProgress, setUploadProgress] = useState<Record<string, boolean>>({});
@@ -40,8 +65,67 @@ export default function RunFormModal({ preselectedSubAreaId }: RunFormModalProps
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
-  // Generate a temporary ID for file uploads (we'll use a timestamp-based ID)
+  // Generate a temporary ID for file uploads
   const [tempRunId] = useState(() => `temp-${Date.now()}`);
+
+  // Fetch available CalTopo maps
+  const { data: caltopoMaps = [], isLoading: mapsLoading, error: mapsError } = useQuery<CalTopoMap[]>({
+    queryKey: ["/api/caltopo/maps"],
+    queryFn: async () => {
+      console.log('🔍 Fetching CalTopo maps...'); // Debug log
+      const response = await fetch('/api/caltopo/fetch-account', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ teamId: '7QNDP0' }) // Your team ID
+      });
+      
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error('❌ CalTopo maps API error:', response.status, errorText);
+        throw new Error(`Failed to fetch maps: ${response.status} ${errorText}`);
+      }
+      
+      const data = await response.json();
+      console.log('✅ CalTopo maps response:', data); // Debug log
+      return data.maps || [];
+    },
+    enabled: true, // Always fetch maps since GPX must come from CalTopo
+    retry: 1,
+    staleTime: 5 * 60 * 1000, // 5 minutes
+  });
+  
+
+  // Fetch features and groups for selected map
+  const { data: mapData, isLoading: featuresLoading } = useQuery<{
+    gpxTracks: CalTopoFeature[];
+    groups: CalTopoGroup[];
+  }>({
+    queryKey: ["/api/caltopo/features", caltopoMapId],
+    queryFn: async () => {
+      if (!caltopoMapId) return { gpxTracks: [], groups: [] };
+      
+      const response = await fetch('/api/caltopo/fetch-map', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ mapId: caltopoMapId })
+      });
+      if (!response.ok) throw new Error('Failed to fetch features');
+      const data = await response.json();
+      return {
+        gpxTracks: data.gpxTracks || [],
+        groups: data.groups || []
+      };
+    },
+    enabled: !!caltopoMapId
+  });
+
+  const caltopoFeatures = mapData?.gpxTracks || [];
+  const caltopoGroups = mapData?.groups || [];
+  
+  // Filter features by selected group
+  const filteredFeatures = caltopoGroupId && caltopoGroupId !== "all"
+    ? caltopoFeatures.filter(feature => feature.groupId === caltopoGroupId)
+    : caltopoFeatures;
 
   const createRunMutation = useMutation({
     mutationFn: async (runData: {
@@ -49,20 +133,59 @@ export default function RunFormModal({ preselectedSubAreaId }: RunFormModalProps
       runDescription?: string;
       runNotes?: string;
       aspect: string;
-      averageAngle: string;
       elevationMin: number;
       elevationMax: number;
       status: string;
       statusComment: string | null;
       subAreaId: string;
-      gpxPath: string | null;
       runPhoto: string | null;
       avalanchePhoto: string | null;
       additionalPhotos: string[] | null;
+      caltopoMapId: string;
+      caltopoFeatureId: string;
     }) => {
-      return await apiRequest("POST", "/api/runs", runData);
+      const response = await apiRequest("POST", "/api/runs", runData);
+      if (!response.ok) {
+        throw new Error(`Failed to create run: ${response.statusText}`);
+      }
+      return response.json();
     },
-    onSuccess: () => {
+    onSuccess: async (newRun) => {
+      console.log('🎉 Run created successfully:', newRun);
+      
+      // Always cache CalTopo GPX since it's required
+      console.log('🔄 Caching CalTopo GPX for run:', {
+        runId: newRun.id,
+        mapId: caltopoMapId,
+        featureId: caltopoFeatureId
+      });
+      
+      try {
+        const cacheResponse = await fetch('/api/caltopo/cache-gpx', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ 
+            mapId: caltopoMapId, 
+            featureId: caltopoFeatureId,
+            runId: newRun.id 
+          })
+        });
+        
+        if (!cacheResponse.ok) {
+          throw new Error(`Cache API failed: ${cacheResponse.statusText}`);
+        }
+        
+        const cacheResult = await cacheResponse.json();
+        console.log('✅ CalTopo GPX cached successfully:', cacheResult);
+      } catch (error) {
+        console.error('❌ Failed to cache CalTopo GPX:', error);
+        toast({ 
+          title: "Warning", 
+          description: "Run created but failed to cache CalTopo GPX. You can link it later.",
+          variant: "destructive" 
+        });
+      }
+      
       queryClient.invalidateQueries({ queryKey: ["/api/runs"] });
       queryClient.invalidateQueries({ queryKey: ["/api/sub-areas"] });
       toast({ title: "Run created successfully" });
@@ -79,7 +202,7 @@ export default function RunFormModal({ preselectedSubAreaId }: RunFormModalProps
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!name.trim() || !aspect || !averageAngle || !elevationMin || !elevationMax) {
+    if (!name.trim() || !aspect || !elevationMin || !elevationMax) {
       toast({ title: "Please fill in all required fields", variant: "destructive" });
       return;
     }
@@ -95,22 +218,34 @@ export default function RunFormModal({ preselectedSubAreaId }: RunFormModalProps
       toast({ title: "Please wait for file uploads to complete", variant: "destructive" });
       return;
     }
+
+    // Validate CalTopo linking (required)
+    if (!caltopoMapId || !caltopoFeatureId) {
+      toast({ title: "Please select a map and feature for CalTopo linking", variant: "destructive" });
+      return;
+    }
+    
+    // Validate group selection if groups are available
+    if (caltopoGroups.length > 0 && (!caltopoGroupId || caltopoGroupId === "")) {
+      toast({ title: "Please select a folder/group to organize the features", variant: "destructive" });
+      return;
+    }
     
     createRunMutation.mutate({
       name: name.trim(),
       runDescription: runDescription.trim() || undefined,
       runNotes: runNotes.trim() || undefined,
       aspect: aspect.toUpperCase(),
-      averageAngle: averageAngle,
       elevationMin: parseInt(elevationMin),
       elevationMax: parseInt(elevationMax),
       status: status,
       statusComment: statusComment.trim() || null,
       subAreaId: preselectedSubAreaId,
-      gpxPath: gpxPath || null,
       runPhoto: runPhoto || null,
       avalanchePhoto: avalanchePhoto || null,
       additionalPhotos: additionalPhotos.length > 0 ? additionalPhotos : null,
+      caltopoMapId: caltopoMapId,
+      caltopoFeatureId: caltopoFeatureId,
     });
   };
 
@@ -118,9 +253,6 @@ export default function RunFormModal({ preselectedSubAreaId }: RunFormModalProps
   const handleFileUploadComplete = (fieldName: string, url: string) => {
     // Update local state with the uploaded file URL
     switch (fieldName) {
-      case 'gpxPath':
-        setGpxPath(url);
-        break;
       case 'runPhoto':
         setRunPhoto(url);
         break;
@@ -141,7 +273,6 @@ export default function RunFormModal({ preselectedSubAreaId }: RunFormModalProps
     });
   };
 
-
   // Handle file upload error
   const handleFileUploadError = (fieldName: string, error: string) => {
     setUploadProgress(prev => ({ ...prev, [fieldName]: false }));
@@ -157,16 +288,19 @@ export default function RunFormModal({ preselectedSubAreaId }: RunFormModalProps
     setRunDescription("");
     setRunNotes("");
     setAspect("");
-    setAverageAngle("");
     setElevationMin("");
     setElevationMax("");
     setStatus("open");
     setStatusComment("");
-    setGpxPath("");
     setRunPhoto("");
     setAvalanchePhoto("");
     setAdditionalPhotos([]);
     setUploadProgress({});
+    setCalTopoMapId("");
+    setCalTopoGroupId("");
+    setCalTopoFeatureId("");
+    setSelectedCalTopoMap(null);
+    setSelectedCalTopoFeature(null);
   };
 
   const handleClose = () => {
@@ -279,22 +413,6 @@ export default function RunFormModal({ preselectedSubAreaId }: RunFormModalProps
                   </SelectContent>
                 </Select>
               </div>
-              <div>
-                <label htmlFor="averageAngle" className="text-sm font-medium">
-                  Average Angle *
-                </label>
-                <Select value={averageAngle} onValueChange={setAverageAngle}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select angle" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="gentle">Gentle (≤25°)</SelectItem>
-                    <SelectItem value="moderate">Moderate (26-35°)</SelectItem>
-                    <SelectItem value="steep">Steep (36-45°)</SelectItem>
-                    <SelectItem value="very_steep">Very Steep (&gt;45°)</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
             </div>
 
             <div className="grid grid-cols-2 gap-4">
@@ -361,6 +479,141 @@ export default function RunFormModal({ preselectedSubAreaId }: RunFormModalProps
             </div>
           </div>
 
+          {/* GPX Track Section */}
+          <div className="space-y-4">
+            <h3 className="text-lg font-semibold">GPX Track</h3>
+            <p className="text-sm text-muted-foreground">
+              Select a GPX track from CalTopo for this run.
+            </p>
+            
+            {/* CalTopo Map Selection */}
+            <div className="space-y-4 border rounded-lg p-4">
+              <div>
+                <label className="text-sm font-medium">Select CalTopo Map *</label>
+                <Select 
+                  value={caltopoMapId} 
+                  onValueChange={(mapId) => {
+                    setCalTopoMapId(mapId);
+                    setCalTopoGroupId("");
+                    setCalTopoFeatureId("");
+                    setSelectedCalTopoMap(null);
+                    setSelectedCalTopoFeature(null);
+                    const map = caltopoMaps.find(m => m.id === mapId);
+                    setSelectedCalTopoMap(map || null);
+                  }}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Choose a map" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {mapsLoading ? (
+                      <div className="p-2 text-sm text-muted-foreground">Loading maps...</div>
+                    ) : mapsError ? (
+                      <div className="p-2 text-sm text-red-600">
+                        Error loading maps: {mapsError.message}
+                      </div>
+                    ) : caltopoMaps.length === 0 ? (
+                      <div className="p-2 text-sm text-muted-foreground">No maps available</div>
+                    ) : (
+                      caltopoMaps.map((map) => (
+                        <SelectItem key={map.id} value={map.id}>
+                          {map.title}
+                        </SelectItem>
+                      ))
+                    )}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              {/* Group Selection */}
+              {caltopoMapId && (
+                <div>
+                  <label className="text-sm font-medium">Select Folder/Group *</label>
+                  <Select 
+                    value={caltopoGroupId} 
+                    onValueChange={(groupId) => {
+                      setCalTopoGroupId(groupId);
+                      setCalTopoFeatureId(""); // Reset feature selection when group changes
+                      setSelectedCalTopoFeature(null);
+                    }}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Choose a folder/group" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {featuresLoading ? (
+                        <div className="p-2 text-sm text-muted-foreground">Loading groups...</div>
+                      ) : caltopoGroups.length === 0 ? (
+                        <div className="p-2 text-sm text-muted-foreground">No groups available - showing all features</div>
+                      ) : (
+                        <>
+                          <SelectItem value="all">All features</SelectItem>
+                          {caltopoGroups.map((group) => (
+                            <SelectItem key={group.id} value={group.id}>
+                              {group.name}
+                            </SelectItem>
+                          ))}
+                        </>
+                      )}
+                    </SelectContent>
+                  </Select>
+                  {caltopoGroups.length === 0 && (
+                    <p className="text-xs text-muted-foreground mt-1">
+                      This map doesn&apos;t have organized groups. All features will be shown.
+                    </p>
+                  )}
+                </div>
+              )}
+
+              {/* Feature Selection */}
+              {caltopoMapId && (
+                <div>
+                  <label className="text-sm font-medium">Select GPX Feature *</label>
+                  <Select 
+                    value={caltopoFeatureId} 
+                    onValueChange={(featureId) => {
+                      setCalTopoFeatureId(featureId);
+                      const feature = filteredFeatures.find(f => f.id === featureId);
+                      setSelectedCalTopoFeature(feature || null);
+                    }}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Choose a feature" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {featuresLoading ? (
+                        <div className="p-2 text-sm text-muted-foreground">Loading features...</div>
+                      ) : filteredFeatures.length === 0 ? (
+                        <div className="p-2 text-sm text-muted-foreground">
+                          {caltopoGroupId ? "No features in selected group" : "No features available"}
+                        </div>
+                      ) : (
+                        filteredFeatures.map((feature) => (
+                          <SelectItem key={feature.id} value={feature.id}>
+                            {feature.title} 
+                          </SelectItem>
+                        ))
+                      )}
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
+
+              {/* Selected Feature Info */}
+              {selectedCalTopoFeature && (
+                <div className="bg-green-50 border border-green-200 rounded-md p-3">
+                  <div className="flex items-center space-x-2">
+                    <MapPin className="w-4 h-4 text-green-600" />
+                    <span className="text-sm font-medium text-green-800">
+                      Selected: {selectedCalTopoFeature.title}
+                    </span>
+                  </div>
+                
+                </div>
+              )}
+            </div>
+          </div>
+
           {/* File Uploads */}
           <div className="space-y-4">
             <h3 className="text-lg font-semibold">Files & Media</h3>
@@ -368,34 +621,6 @@ export default function RunFormModal({ preselectedSubAreaId }: RunFormModalProps
               Upload files now - they will be included when you create the run.
             </p>
             
-            {/* GPX Track */}
-            <div className="space-y-2">
-              <label className="text-sm font-medium">GPX Track</label>
-              <FileUpload
-                runId={tempRunId}
-                fileType="gpx"
-                fieldName="gpxPath"
-                onUploadComplete={(url) => handleFileUploadComplete("gpxPath", url)}
-                onUploadError={(error) => handleFileUploadError("gpxPath", error)}
-              />
-              {gpxPath && (
-                <div className="flex items-center space-x-2 text-sm text-green-600">
-                  <Upload className="w-4 h-4" />
-                  <span>GPX file uploaded</span>
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    onClick={() => setGpxPath("")}
-                  >
-                    <X className="w-4 h-4" />
-                  </Button>
-                </div>
-              )}
-              {uploadProgress.gpxPath && (
-                <div className="text-sm text-blue-600">Uploading GPX file...</div>
-              )}
-            </div>
-
             {/* Run Photo */}
             <div className="space-y-2">
               <label className="text-sm font-medium">Run Photo</label>
@@ -500,10 +725,12 @@ export default function RunFormModal({ preselectedSubAreaId }: RunFormModalProps
                 createRunMutation.isPending || 
                 !name.trim() || 
                 !aspect || 
-                !averageAngle || 
                 !elevationMin || 
                 !elevationMax || 
                 !preselectedSubAreaId ||
+                !caltopoMapId ||
+                !caltopoFeatureId ||
+                (caltopoGroups.length > 0 && (!caltopoGroupId || caltopoGroupId === "")) ||
                 isAnyFileUploading
               }
             >

@@ -76,7 +76,6 @@ export async function getRuns() {
     runDescription: item.run_description, // Convert run_description to runDescription
     runNotes: item.run_notes, // Convert run_notes to runNotes
     aspect: item.aspect,
-    averageAngle: item.average_angle, // Convert average_angle to averageAngle
     elevationMax: item.elevation_max, // Convert elevation_max to elevationMax
     elevationMin: item.elevation_min, // Convert elevation_min to elevationMin
     status: item.status,
@@ -189,7 +188,6 @@ export async function createRun(run: {
   runDescription?: string;
   runNotes?: string;
   aspect: string;
-  averageAngle: string;
   elevationMax: number;
   elevationMin: number;
   status: string;
@@ -198,6 +196,10 @@ export async function createRun(run: {
   runPhoto?: string | null;
   avalanchePhoto?: string | null;
   additionalPhotos?: string[] | null;
+  // Add CalTopo fields
+  caltopoMapId?: string | null;
+  caltopoFeatureId?: string | null;
+  gpxUpdatedAt?: Date | null;
 }) {
   // Get the next run number for this sub-area if not provided
   let runNumber = run.runNumber;
@@ -222,7 +224,6 @@ export async function createRun(run: {
     run_description: run.runDescription, // Convert runDescription to run_description
     run_notes: run.runNotes, // Convert runNotes to run_notes
     aspect: run.aspect,
-    average_angle: run.averageAngle, // Convert averageAngle to average_angle
     elevation_max: run.elevationMax, // Convert elevationMax to elevation_max
     elevation_min: run.elevationMin, // Convert elevationMin to elevation_min
     status: run.status,
@@ -231,6 +232,10 @@ export async function createRun(run: {
     run_photo: run.runPhoto, // Convert runPhoto to run_photo
     avalanche_photo: run.avalanchePhoto, // Convert avalanchePhoto to avalanche_photo
     additional_photos: run.additionalPhotos, // Convert additionalPhotos to additional_photos
+    // Add CalTopo fields
+    caltopo_map_id: run.caltopoMapId, // Convert caltopoMapId to caltopo_map_id
+    caltopo_feature_id: run.caltopoFeatureId, // Convert caltopoFeatureId to caltopo_feature_id
+    gpx_updated_at: run.gpxUpdatedAt, // Convert gpxUpdatedAt to gpx_updated_at
   };
 
   console.log('🔄 Creating run with data:', dbData);
@@ -306,15 +311,18 @@ export async function updateRun(id: string, updates: Partial<{
   runDescription: string;
   runNotes: string;
   aspect: string;
-  averageAngle: string;
   elevationMax: number;
   elevationMin: number;
   status: string;
   statusComment: string | null;
-  gpxPath: string;
-  runPhoto: string;
-  avalanchePhoto: string;
-  additionalPhotos: string[];
+  gpxPath: string | null;
+  runPhoto: string | null;
+  avalanchePhoto: string | null;
+  additionalPhotos: string[] | null;
+  // CalTopo integration fields
+  caltopoMapId: string | null;
+  caltopoFeatureId: string | null;
+  gpxUpdatedAt: Date | null;
 }>) {
   console.log('🔄 Updating run in database:', { id, updates });
   
@@ -326,7 +334,6 @@ export async function updateRun(id: string, updates: Partial<{
   if (updates.runDescription !== undefined) dbUpdates.run_description = updates.runDescription;
   if (updates.runNotes !== undefined) dbUpdates.run_notes = updates.runNotes;
   if (updates.aspect !== undefined) dbUpdates.aspect = updates.aspect;
-  if (updates.averageAngle !== undefined) dbUpdates.average_angle = updates.averageAngle;
   if (updates.elevationMax !== undefined) dbUpdates.elevation_max = updates.elevationMax;
   if (updates.elevationMin !== undefined) dbUpdates.elevation_min = updates.elevationMin;
   if (updates.status !== undefined) dbUpdates.status = updates.status;
@@ -335,6 +342,10 @@ export async function updateRun(id: string, updates: Partial<{
   if (updates.runPhoto !== undefined) dbUpdates.run_photo = updates.runPhoto;
   if (updates.avalanchePhoto !== undefined) dbUpdates.avalanche_photo = updates.avalanchePhoto;
   if (updates.additionalPhotos !== undefined) dbUpdates.additional_photos = updates.additionalPhotos;
+  // CalTopo integration fields
+  if (updates.caltopoMapId !== undefined) dbUpdates.caltopo_map_id = updates.caltopoMapId;
+  if (updates.caltopoFeatureId !== undefined) dbUpdates.caltopo_feature_id = updates.caltopoFeatureId;
+  if (updates.gpxUpdatedAt !== undefined) dbUpdates.gpx_updated_at = updates.gpxUpdatedAt;
   
   console.log('🔄 Converted updates for database:', dbUpdates);
   

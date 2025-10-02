@@ -24,7 +24,6 @@ export const runs = pgTable("runs", {
   runDescription: text("run_description"), // Optional run description
   runNotes: text("run_notes"), // Optional run notes
   aspect: text("aspect").notNull(), // SW, W, E, NW, etc.
-  averageAngle: text("average_angle").notNull(), // ENUM for gradient
   elevationMax: integer("elevation_max").notNull(), // meters
   elevationMin: integer("elevation_min").notNull(), // meters
   status: text("status").notNull().default("open"), // open, conditional, closed
@@ -33,6 +32,10 @@ export const runs = pgTable("runs", {
   runPhoto: text("run_photo"), // Primary run photo
   avalanchePhoto: text("avalanche_photo"), // Avalanche path photo
   additionalPhotos: json("additional_photos").$type<string[]>().default([]), // Additional images
+  // CalTopo integration fields
+  caltopoMapId: varchar("caltopo_map_id"), // CalTopo map ID
+  caltopoFeatureId: varchar("caltopo_feature_id"), // CalTopo feature ID
+  gpxUpdatedAt: timestamp("gpx_updated_at"), // When GPX was last cached
   lastUpdated: timestamp("last_updated").defaultNow(),
   createdAt: timestamp("created_at").defaultNow(),
 });
@@ -81,7 +84,6 @@ export const insertRunSchema = createInsertSchema(runs).omit({
 }).extend({
   status: z.enum(["open", "conditional", "closed"]),
   aspect: z.enum(["N", "NE", "E", "SE", "S", "SW", "W", "NW"]),
-  averageAngle: z.enum(["gentle", "moderate", "steep", "very_steep"]),
   runDescription: z.string().optional(),
   runNotes: z.string().optional(),
   statusComment: z.string().nullable().optional(),
@@ -89,6 +91,10 @@ export const insertRunSchema = createInsertSchema(runs).omit({
   runPhoto: z.string().nullable().optional(),
   avalanchePhoto: z.string().nullable().optional(),
   additionalPhotos: z.array(z.string()).nullable().optional().default([]),
+  // CalTopo integration fields
+  caltopoMapId: z.string().nullable().optional(),
+  caltopoFeatureId: z.string().nullable().optional(),
+  gpxUpdatedAt: z.date().nullable().optional(),
 });
 
 // Schema for partial updates (without strict validation)
@@ -99,7 +105,6 @@ export const updateRunSchema = z.object({
   runDescription: z.string().optional(),
   runNotes: z.string().optional(),
   aspect: z.enum(["N", "NE", "E", "SE", "S", "SW", "W", "NW"]).optional(),
-  averageAngle: z.enum(["gentle", "moderate", "steep", "very_steep"]).optional(),
   elevationMax: z.number().optional(),
   elevationMin: z.number().optional(),
   status: z.enum(["open", "conditional", "closed"]).optional(),
@@ -108,6 +113,10 @@ export const updateRunSchema = z.object({
   runPhoto: z.string().optional(),
   avalanchePhoto: z.string().optional(),
   additionalPhotos: z.array(z.string()).optional(),
+  // CalTopo integration fields
+  caltopoMapId: z.string().nullable().optional(),
+  caltopoFeatureId: z.string().nullable().optional(),
+  gpxUpdatedAt: z.date().nullable().optional(),
 });
 
 export const insertDailyPlanSchema = createInsertSchema(dailyPlans).omit({
