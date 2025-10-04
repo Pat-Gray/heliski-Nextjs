@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect } from 'react';
-import { Dialog, DialogContent } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import RunDetailView from "./run-detail-view";
 
 interface RunDetailSideModalProps {
@@ -38,6 +38,7 @@ export default function RunDetailSideModal({
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
       <DialogContent className="max-w-4xl max-h-[90vh] w-full h-full p-0 overflow-hidden">
+        <DialogTitle className="sr-only">Run Details</DialogTitle>
         <div className="flex flex-col h-full">
           {/* Header */}
           <div className="flex items-center justify-between p-4 border-b bg-white flex-shrink-0">

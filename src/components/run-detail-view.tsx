@@ -13,7 +13,7 @@ import { Mountain, AlertTriangle, MapPin, Edit2, Save, X, Eye, Plus, Upload } fr
 import Image from 'next/image';
 import type { Run, SubArea } from '@/lib/schemas/schema';
 import GpxUpdateButton from './gpx-update-button';
-import GPXViewer from './gpx-viewer';
+
 
 interface RunDetailViewProps {
   runId: string | null;
@@ -25,9 +25,8 @@ interface RunDetailViewProps {
 export default function RunDetailView({ runId }: RunDetailViewProps) {
   const [selectedRun, setSelectedRun] = useState<Run | null>(null);
   const [showMap, setShowMap] = useState(false);
-  const [editingField, setEditingField] = useState<'description' | 'notes' | null>(null);
+  const [editingField, setEditingField] = useState<'description' | null>(null);
   const [editDescription, setEditDescription] = useState('');
-  const [editNotes, setEditNotes] = useState('');
   const [showImageViewer, setShowImageViewer] = useState(false);
   const [selectedImageIndex, setSelectedImageIndex] = useState(0);
   const queryClient = useQueryClient();
@@ -66,7 +65,14 @@ export default function RunDetailView({ runId }: RunDetailViewProps) {
       setSelectedRun(run);
       if (run) {
         setEditDescription(run.runDescription || '');
-        setEditNotes(run.runNotes || '');
+        // Debug: Log when run data changes
+        console.log('🔄 Run detail view updated:', {
+          runId: run.id,
+          runName: run.name,
+          runNotes: run.runNotes?.slice(0, 100) + '...',
+          hasCalTopoMapId: !!run.caltopoMapId,
+          hasCalTopoFeatureId: !!run.caltopoFeatureId
+        });
       }
     }
   }, [runs, runId]);
@@ -117,7 +123,7 @@ export default function RunDetailView({ runId }: RunDetailViewProps) {
     return str.charAt(0).toUpperCase() + str.slice(1);
   };
 
-  const handleEdit = (field: 'description' | 'notes') => {
+  const handleEdit = (field: 'description') => {
     setEditingField(field);
   };
 
@@ -127,10 +133,9 @@ export default function RunDetailView({ runId }: RunDetailViewProps) {
     const updates: Partial<Run> = {};
     if (editingField === 'description') {
       updates.runDescription = editDescription;
-    } else if (editingField === 'notes') {
-      updates.runNotes = editNotes;
     }
     
+    // Save locally
     updateRunMutation.mutate({ runId: selectedRun.id, updates });
   };
 
@@ -138,9 +143,9 @@ export default function RunDetailView({ runId }: RunDetailViewProps) {
     setEditingField(null);
     if (selectedRun) {
       setEditDescription(selectedRun.runDescription || '');
-      setEditNotes(selectedRun.runNotes || '');
     }
   };
+
 
   // Get sub-area name
   const getSubAreaName = (subAreaId: string) => {
@@ -150,9 +155,21 @@ export default function RunDetailView({ runId }: RunDetailViewProps) {
   // Get all images for the selected run
   const getAllImages = (run: Run): string[] => {
     const images: string[] = [];
+    
+    // Add main run photo
     if (run.runPhoto) images.push(run.runPhoto);
+    
+    // Add avalanche photo
     if (run.avalanchePhoto) images.push(run.avalanchePhoto);
-    if (run.additionalPhotos) images.push(...run.additionalPhotos);
+    
+    // Add CalTopo photos - all are now simple string URLs
+    if (run.additionalPhotos) {
+      run.additionalPhotos.forEach(photo => {
+        if (typeof photo === 'string') {
+          images.push(photo);
+        }
+      });
+    }
     return images;
   };
 
@@ -202,7 +219,7 @@ export default function RunDetailView({ runId }: RunDetailViewProps) {
           <div className="ml-auto flex items-center gap-2">
             <GpxUpdateButton 
               runId={selectedRun.id} 
-              currentGpxPath={selectedRun.gpxPath}
+              currentGpxPath={selectedRun.gpxPath ?? null}
             />
             {(selectedRun.gpxPath || (selectedRun.caltopoMapId && selectedRun.caltopoFeatureId)) ? (
               <Button
@@ -270,21 +287,23 @@ export default function RunDetailView({ runId }: RunDetailViewProps) {
       </div>
 
       {/* Main Content */}
-      <div className="flex-1 overflow-hidden">
-        {showMap && selectedRun.gpxPath ? (
+        
+          <div className="flex-1 overflow-hidden">
+        {showMap ? (
           <div className="h-full">
             <NZTopoMap
-              areaId={selectedRun.subAreaId || ''}
-              subAreaId={selectedRun.subAreaId || ''}
-              selectedRunId={selectedRun.id}
+              areaId={selectedRun.subAreaId ?? ''}
+              subAreaId={selectedRun.subAreaId ?? ''}
+              selectedRunId={selectedRun.id ?? ''}
             />
-          </div>
-        ) : showMap && (selectedRun.caltopoMapId && selectedRun.caltopoFeatureId) ? (
-          <div className="h-full">
-            <GPXViewer runId={selectedRun.id} className="h-full" />
           </div>
         ) : (
           <div className="h-full overflow-y-auto p-4 space-y-4">
+            {/* Run Description and Notes - Two Columns */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+            </div>
+            
+
 
             {/* Run Description and Notes - Two Columns */}
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
@@ -339,54 +358,15 @@ export default function RunDetailView({ runId }: RunDetailViewProps) {
                 </CardContent>
               </Card>
 
-              {/* Run Notes */}
+              {/* CalTopo Comment - Read Only */}
               <Card>
                 <CardHeader className="pb-3">
-                  <div className="flex items-center justify-between">
-                    <CardTitle className="text-sm">Run Notes</CardTitle>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => handleEdit('notes')}
-                      className="h-8 w-8 p-0"
-                    >
-                      <Edit2 className="h-4 w-4" />
-                    </Button>
-                  </div>
+                  <CardTitle className="text-sm">CalTopo Comment</CardTitle>
                 </CardHeader>
                 <CardContent className="p-0">
-                  {editingField === 'notes' ? (
-                    <div className="space-y-2">
-                      <Textarea
-                        value={editNotes}
-                        onChange={(e) => setEditNotes(e.target.value)}
-                        placeholder="Enter run notes..."
-                        className="min-h-[80px]"
-                      />
-                      <div className="flex gap-2">
-                        <Button
-                          size="sm"
-                          onClick={handleSave}
-                          disabled={updateRunMutation.isPending}
-                        >
-                          <Save className="h-4 w-4 mr-1" />
-                          Save
-                        </Button>
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          onClick={handleCancel}
-                        >
-                          <X className="h-4 w-4 mr-1" />
-                          Cancel
-                        </Button>
-                      </div>
-              </div>
-                  ) : (
-                    <p className="text-sm text-gray-700">
-                      {selectedRun.runNotes || null }
-                    </p>
-                  )}
+                  <p className="text-sm text-gray-700 p-3 bg-gray-50 rounded-md">
+                    {selectedRun.runNotes || 'No CalTopo comment'}
+                  </p>
                 </CardContent>
               </Card>
             </div>
@@ -600,100 +580,148 @@ export default function RunDetailView({ runId }: RunDetailViewProps) {
                       </div>
                     </div>
 
-                    {/* Additional Photos Gallery */}
+                    {/* CalTopo Photos Gallery - UPDATED */}
                     <div className="flex-1">
                       <div className="flex items-center justify-between mb-2">
                         <div className="flex items-center space-x-1 text-sm text-gray-600">
                           <Mountain className="h-4 w-4" />
-                          <span className="font-medium">Additional Photos ({selectedRun.additionalPhotos?.length || 0})</span>
+                          <span className="font-medium">CalTopo Photos ({selectedRun.additionalPhotos?.length || 0})</span>
                         </div>
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          className="h-6 w-6 p-0"
-                          onClick={() => {
-                            const input = document.createElement('input');
-                            input.type = 'file';
-                            input.accept = 'image/*';
-                            input.onchange = async (e) => {
-                              const file = (e.target as HTMLInputElement).files?.[0];
-                              if (file) {
-                                try {
-                                  const formData = new FormData();
-                                  formData.append('file', file);
-                                  formData.append('runId', selectedRun.id);
-                                  formData.append('fieldName', 'additionalPhotos');
-                                  
-                                  const response = await fetch('/api/upload', {
-                                    method: 'POST',
-                                    body: formData,
-                                  });
-                                  
-                                  if (response.ok) {
-                                    const { url } = await response.json();
-                                    const updatedPhotos = [...(selectedRun.additionalPhotos || []), url];
-                                    const updateResponse = await fetch(`/api/runs/${selectedRun.id}`, {
-                                      method: 'PATCH',
-                                      headers: { 'Content-Type': 'application/json' },
-                                      body: JSON.stringify({ additionalPhotos: updatedPhotos }),
+                        <div className="flex items-center gap-1">
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="h-6 w-6 p-0"
+                            onClick={() => {
+                              const input = document.createElement('input');
+                              input.type = 'file';
+                              input.accept = 'image/*';
+                              input.onchange = async (e) => {
+                                const file = (e.target as HTMLInputElement).files?.[0];
+                                if (file) {
+                                  try {
+                                    const formData = new FormData();
+                                    formData.append('file', file);
+                                    formData.append('runId', selectedRun.id);
+                                    formData.append('fieldName', 'additionalPhotos');
+                                    
+                                    const response = await fetch('/api/upload', {
+                                      method: 'POST',
+                                      body: formData,
                                     });
-                                    if (updateResponse.ok) {
-                                      queryClient.invalidateQueries({ queryKey: ['/api/runs'] });
+                                    
+                                    if (response.ok) {
+                                      const { url } = await response.json();
+                                      const updatedPhotos = [...(selectedRun.additionalPhotos || []), url];
+                                      const updateResponse = await fetch(`/api/runs/${selectedRun.id}`, {
+                                        method: 'PATCH',
+                                        headers: { 'Content-Type': 'application/json' },
+                                        body: JSON.stringify({ additionalPhotos: updatedPhotos }),
+                                      });
+                                      if (updateResponse.ok) {
+                                        queryClient.invalidateQueries({ queryKey: ['/api/runs'] });
+                                        
+                                        // Sync images to CalTopo if run is linked
+                                        if (selectedRun.caltopoMapId && selectedRun.caltopoFeatureId) {
+                                          try {
+                                            const syncResponse = await fetch('/api/caltopo/sync-images-to-caltopo', {
+                                              method: 'POST',
+                                              headers: { 'Content-Type': 'application/json' },
+                                              body: JSON.stringify({ runId: selectedRun.id })
+                                            });
+                                            
+                                            if (syncResponse.ok) {
+                                              const syncResult = await syncResponse.json();
+                                              console.log('✅ Images synced to CalTopo:', syncResult);
+                                            } else {
+                                              console.error('❌ Failed to sync images to CalTopo');
+                                            }
+                                          } catch (syncError) {
+                                            console.error('❌ Error syncing images to CalTopo:', syncError);
+                                          }
+                                        }
+                                      }
                                     }
+                                  } catch (error) {
+                                    console.error('Failed to add additional photo:', error);
                                   }
-                                } catch (error) {
-                                  console.error('Failed to add additional photo:', error);
                                 }
-                              }
-                            };
-                            input.click();
-                          }}
-                        >
-                          <Plus className="h-3 w-3" />
-                        </Button>
+                              };
+                              input.click();
+                            }}
+                          >
+                            <Plus className="h-3 w-3" />
+                          </Button>
+                        </div>
                       </div>
                       <div className="space-y-2 max-h-[220px] overflow-y-auto">
                         {selectedRun.additionalPhotos && selectedRun.additionalPhotos.length > 0 ? (
-                          selectedRun.additionalPhotos.map((photo, index) => (
-                            <div key={index} className="relative group">
-                              <div className="h-20 border rounded overflow-hidden">
-                                <Image
-                                  src={photo}
-                                  alt={`Additional photo ${index + 1}`}
-                                  width={200}
-                                  height={80}
-                                  className="w-full h-full object-cover cursor-pointer hover:opacity-90 transition-opacity"
-                                  onClick={() => handleImageClick(photo)}
-                                />
-                              </div>
-                              <Button
-                                variant="destructive"
-                                size="sm"
-                                className="absolute top-1 right-1 h-5 w-5 p-0 opacity-0 group-hover:opacity-100 transition-opacity"
-                                onClick={async (e) => {
-                                  e.stopPropagation();
-                                  try {
-                                    const updatedPhotos = selectedRun.additionalPhotos?.filter((_, i) => i !== index) || [];
-                                    const response = await fetch(`/api/runs/${selectedRun.id}`, {
-                                      method: 'PATCH',
-                                      headers: { 'Content-Type': 'application/json' },
-                                      body: JSON.stringify({ additionalPhotos: updatedPhotos }),
-                                    });
-                                    if (response.ok) {
-                                      queryClient.invalidateQueries({ queryKey: ['/api/runs'] });
+                          selectedRun.additionalPhotos.map((photo, index) => {
+                            const imageUrl = typeof photo === 'string' ? photo : '';
+                            const imageTitle = `Additional photo ${index + 1}`;
+                            
+                            return (
+                              <div key={index} className="relative group">
+                                <div className="h-[200px] border rounded overflow-hidden">
+                                  <Image
+                                    src={imageUrl}
+                                    alt={imageTitle}
+                                    width={200}
+                                    height={200}
+                                    className="w-full h-full object-cover
+                                    cursor-pointer hover:opacity-90 transition-opacity"
+                                    onClick={() => handleImageClick(imageUrl)}
+                                  />
+                                </div>
+                                <Button
+                                  variant="destructive"
+                                  size="sm"
+                                  className="absolute top-1 right-1 h-5 w-5 p-0 opacity-0 group-hover:opacity-100 transition-opacity"
+                                  onClick={async (e) => {
+                                    e.stopPropagation();
+                                    try {
+                                      const updatedPhotos = selectedRun.additionalPhotos?.filter((_, i) => i !== index) || [];
+                                      const response = await fetch(`/api/runs/${selectedRun.id}`, {
+                                        method: 'PATCH',
+                                        headers: { 'Content-Type': 'application/json' },
+                                        body: JSON.stringify({ additionalPhotos: updatedPhotos }),
+                                      });
+                                      if (response.ok) {
+                                        queryClient.invalidateQueries({ queryKey: ['/api/runs'] });
+                                        
+                                        // Sync images to CalTopo if run is linked
+                                        if (selectedRun.caltopoMapId && selectedRun.caltopoFeatureId) {
+                                          try {
+                                            const syncResponse = await fetch('/api/caltopo/sync-images-to-caltopo', {
+                                              method: 'POST',
+                                              headers: { 'Content-Type': 'application/json' },
+                                              body: JSON.stringify({ runId: selectedRun.id })
+                                            });
+                                            
+                                            if (syncResponse.ok) {
+                                              const syncResult = await syncResponse.json();
+                                              console.log('✅ Images synced to CalTopo:', syncResult);
+                                            } else {
+                                              console.error('❌ Failed to sync images to CalTopo');
+                                            }
+                                          } catch (syncError) {
+                                            console.error('❌ Error syncing images to CalTopo:', syncError);
+                                          }
+                                        }
+                                      }
+                                    } catch (error) {
+                                      console.error('Failed to remove photo:', error);
                                     }
-                                  } catch (error) {
-                                    console.error('Failed to remove photo:', error);
-                                  }
-                                }}
-                              >
-                                <X className="h-3 w-3" />
-                              </Button>
-                            </div>
-                          ))
+                                  }}
+                                >
+                                  <X className="h-3 w-3" />
+                                </Button>
+                              </div>
+                            );
+                          })
                         ) : (
                           <div className="h-20 border rounded bg-gray-100 flex items-center justify-center text-gray-400 text-xs">
-                            No additional photos
+                            No CalTopo photos
                           </div>
                         )}
                       </div>

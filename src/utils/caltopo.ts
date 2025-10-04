@@ -113,3 +113,92 @@ export async function caltopoRequest(
   
   return data;
 }
+
+export async function caltopoRequestBinary(
+  endpoint: string,
+  credentialId: string,
+  credentialSecret: string,
+  acceptHeader?: string
+): Promise<{ arrayBuffer: ArrayBuffer; contentType: string }> {
+  // Validate credentials before proceeding
+  if (!credentialId || !credentialSecret) {
+    const error = 'Missing CalTopo credentials';
+    console.error('❌ CalTopo Credential Error:', {
+      credentialId: credentialId ? 'Present' : 'MISSING',
+      credentialSecret: credentialSecret ? 'Present' : 'MISSING',
+      error
+    });
+    throw new Error(error);
+  }
+
+  const payloadString = '';
+  const expires = Date.now() + DEFAULT_TIMEOUT_MS;
+  const fullUrl = `https://caltopo.com${endpoint}`;
+  
+  const signature = sign('GET', endpoint, expires, payloadString, credentialSecret);
+  
+  const parameters: { [key: string]: string } = {
+    id: credentialId,
+    expires: expires.toString(),
+    signature,
+  };
+
+  const queryString = new URLSearchParams(parameters).toString();
+  const url = `${fullUrl}?${queryString}`;
+
+  const headers: { [key: string]: string } = {};
+  if (acceptHeader) {
+    headers['Accept'] = acceptHeader;
+  }
+
+  const response = await fetch(url, {
+    method: 'GET',
+    headers,
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    console.error('❌ CalTopo Binary API Error Details:', {
+      endpoint,
+      status: response.status,
+      statusText: response.statusText,
+      responseSnippet: errorText.slice(0, 500),
+      requestUrl: url,
+    });
+    throw new Error(`CalTopo Binary API failed with status ${response.status}: ${errorText.slice(0, 200)}`);
+  }
+
+  const contentType = response.headers.get('content-type') || 'application/octet-stream';
+  
+  // Check if we got JSON instead of binary data
+  if (contentType.includes('application/json')) {
+    const jsonData = await response.json();
+    console.error('❌ CalTopo returned JSON instead of binary data:', {
+      endpoint,
+      contentType,
+      jsonData
+    });
+    
+    // If it's a JSON response with a result field, it might contain an error or redirect
+    if (jsonData && typeof jsonData === 'object' && 'result' in jsonData) {
+      throw new Error(`CalTopo returned JSON error: ${JSON.stringify(jsonData.result)}`);
+    }
+    
+    throw new Error(`CalTopo returned JSON instead of binary data: ${JSON.stringify(jsonData)}`);
+  }
+
+  const arrayBuffer = await response.arrayBuffer();
+  
+  // Additional check: if the data is too small, it's probably not a real image
+  if (arrayBuffer.byteLength < 1000) {
+    const textData = new TextDecoder().decode(arrayBuffer);
+    console.error('❌ CalTopo returned suspiciously small data:', {
+      endpoint,
+      byteLength: arrayBuffer.byteLength,
+      textData: textData.slice(0, 200)
+    });
+    throw new Error(`CalTopo returned suspiciously small data (${arrayBuffer.byteLength} bytes): ${textData.slice(0, 100)}`);
+  }
+
+  return { arrayBuffer, contentType };
+}

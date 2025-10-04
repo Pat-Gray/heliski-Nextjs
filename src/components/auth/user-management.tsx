@@ -171,7 +171,7 @@ export default function UserManagement() {
                   <div>
                     <CardTitle className="text-lg">{user.email}</CardTitle>
                     <CardDescription>
-                      Created: {new Date(user.created_at).toLocaleDateString()}
+                      Created: {new Date(user.created_at).toISOString().split('T')[0]}
                     </CardDescription>
                   </div>
                 </div>
@@ -193,7 +193,7 @@ export default function UserManagement() {
               <div className="flex items-center justify-between">
                 <div className="text-sm text-muted-foreground">
                   Last sign in: {user.last_sign_in_at 
-                    ? new Date(user.last_sign_in_at).toLocaleDateString()
+                    ? new Date(user.last_sign_in_at).toISOString().split('T')[0]
                     : 'Never'
                   }
                 </div>

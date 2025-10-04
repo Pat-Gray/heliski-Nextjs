@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { Button } from '@/components/ui/button';
-import { Upload, MapPin } from 'lucide-react';
+import { MapPin } from 'lucide-react';
 
 interface GpxUpdateButtonProps {
   runId: string;
@@ -61,7 +61,7 @@ export default function GpxUpdateButton({ runId, currentGpxPath, onUpdate }: Gpx
     <div className="flex items-center gap-1">
       {currentGpxPath ? (
         <>
-          <Button
+          {/* <Button
             variant="outline"
             size="sm"
             onClick={handleUpload}
@@ -70,7 +70,7 @@ export default function GpxUpdateButton({ runId, currentGpxPath, onUpdate }: Gpx
           >
             <Upload className="h-3 w-3 mr-1" />
             {isUploading ? 'Uploading...' : 'Update GPX Track'}
-          </Button>
+          </Button> */}
           
         </>
       ) : (

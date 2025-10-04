@@ -219,6 +219,7 @@ export default function CalTopoLinkingPage() {
     }
   });
 
+
   const handleLinkRun = async (runId: string, mapId: string, featureId: string) => {
     setLinkingState(prev => ({ ...prev, isLinking: true }));
     
@@ -262,9 +263,11 @@ export default function CalTopoLinkingPage() {
       {/* Map Selection */}
       <Card>
         <CardHeader>
-          <CardTitle className="flex items-center">
-            <MapPin className="w-5 h-5 mr-2" />
-            Select CalTopo Map
+          <CardTitle className="flex items-center justify-between">
+            <div className="flex items-center">
+              <MapPin className="w-5 h-5 mr-2" />
+              Select CalTopo Map
+            </div>
           </CardTitle>
         </CardHeader>
         <CardContent>
@@ -290,6 +293,7 @@ export default function CalTopoLinkingPage() {
               <span>Loading features...</span>
             </div>
           )}
+          
         </CardContent>
       </Card>
 

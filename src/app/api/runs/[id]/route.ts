@@ -9,7 +9,6 @@ export async function GET(
 ) {
   try {
     const { id } = await params;
-    console.log('🔄 Fetching run:', id);
     const { data: result, error } = await supabase
       .from('runs')
       .select('*')
@@ -19,10 +18,8 @@ export async function GET(
     if (error || !result) {
       return NextResponse.json({ error: "Run not found" }, { status: 404 });
     }
-    console.log('✅ Run fetched successfully:', result.id);
     return NextResponse.json(result);
   } catch (error: unknown) {
-    console.error('❌ API Error:', error);
     return NextResponse.json(
       { 
         error: error instanceof Error ? error.message : 'Internal server error',
@@ -39,18 +36,11 @@ export async function PUT(
 ) {
   try {
     const { id } = await params;
-    console.log('🔄 Updating run:', id);
     const body = await request.json();
-    console.log('📝 Request body:', body);
-    
     const validatedData = updateRunSchema.parse(body);
-    console.log('✅ Validated data:', validatedData);
-    
     const result = await updateRun(id, validatedData);
-    console.log('✅ Run updated successfully:', result.id);
     return NextResponse.json(result);
   } catch (error: unknown) {
-    console.error('❌ API Error:', error);
     return NextResponse.json(
       { 
         error: error instanceof Error ? error.message : 'Internal server error',
@@ -67,14 +57,14 @@ export async function PATCH(
 ) {
   try {
     const { id } = await params;
-    console.log('🔄 Patching run:', id);
     const body = await request.json();
-    console.log('📝 Request body:', body);
     
     // For PATCH, we can update any fields (keep camelCase for updateRun function)
     const updateData: {
       status?: string;
       statusComment?: string | null;
+      runDescription?: string;
+      runNotes?: string;
       gpxPath?: string;
       runPhoto?: string;
       avalanchePhoto?: string;
@@ -83,18 +73,16 @@ export async function PATCH(
     
     if (body.status !== undefined) updateData.status = body.status;
     if (body.statusComment !== undefined) updateData.statusComment = body.statusComment;
+    if (body.runDescription !== undefined) updateData.runDescription = body.runDescription;
+    if (body.runNotes !== undefined) updateData.runNotes = body.runNotes;
     if (body.gpxPath !== undefined) updateData.gpxPath = body.gpxPath;
     if (body.runPhoto !== undefined) updateData.runPhoto = body.runPhoto;
     if (body.avalanchePhoto !== undefined) updateData.avalanchePhoto = body.avalanchePhoto;
     if (body.additionalPhotos !== undefined) updateData.additionalPhotos = body.additionalPhotos;
     
-    console.log('✅ Update data:', updateData);
-    
     const result = await updateRun(id, updateData);
-    console.log('✅ Run updated successfully:', result.id);
     return NextResponse.json(result);
   } catch (error: unknown) {
-    console.error('❌ API Error:', error);
     return NextResponse.json(
       { 
         error: error instanceof Error ? error.message : 'Internal server error',
@@ -111,8 +99,6 @@ export async function DELETE(
 ) {
   try {
     const { id } = await params;
-    console.log('🔄 Deleting run:', id);
-    
     // Get the run first to delete associated files
     const { data: existingRun, error: fetchError } = await supabase
       .from('runs')
@@ -145,22 +131,17 @@ export async function DELETE(
             const bucketIndex = 5;
             const path = pathParts.slice(bucketIndex + 1).join('/');
             await deleteFile('heli-ski-files', path);
-            console.log('✅ Deleted file:', path);
-          } else {
-            console.warn('Unexpected URL format:', fileUrl);
           }
         } catch (error) {
-          console.warn('Failed to delete file from Supabase:', fileUrl, error);
+          // Silently continue if file deletion fails
         }
       }
     }
     
     // Delete the run from database
     await deleteRun(id);
-    console.log('✅ Run deleted successfully:', id);
     return NextResponse.json({ success: true });
   } catch (error: unknown) {
-    console.error('❌ API Error:', error);
     return NextResponse.json(
       { 
         error: error instanceof Error ? error.message : 'Internal server error',

@@ -1,11 +1,46 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import Map, { Source, Layer, MapRef } from 'react-map-gl/mapbox';
+import Map, { Source, Layer, MapRef, MapMouseEvent } from 'react-map-gl/mapbox';
 import type { FeatureCollection, LineString, Point } from 'geojson';
 import { useRunsForArea } from '@/contexts/hooks/use-runs-for-area';
 import { parseGPXToGeoJSON } from '@/utils/gpx-parser';
 import { Loader2, MapPin, AlertTriangle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import type { Run } from '@/lib/schemas/schema';
+import AvalancheFeatureModal from '../modals/avalanche-feature-modal';
+
+
+interface AvalancheImage {
+  id: string;
+  title?: string;
+  description?: string;
+  comment?: string;
+  notes?: string;
+  local_file_url: string;
+  caltopo_url?: string;
+  file_size?: number;
+  mime_type?: string;
+  caltopo_created_at?: string;
+  caltopo_updated_at?: string;
+}
+
+interface AvalancheFeature {
+  id: string;
+  title: string;
+  coordinates: number[][];
+  properties: Record<string, unknown>;
+  pointCount: number;
+  groupId?: string;
+  hasImages: boolean;
+  geometryType: string;
+  class: string;
+  markerSymbol?: string;
+  markerColor?: string;
+  markerSize?: string;
+  visible?: boolean;
+  creator?: string;
+  created?: string;
+  updated?: string;
+  images?: AvalancheImage[];
+}
 
 interface NZTopoMapProps {
   areaId: string;
@@ -13,6 +48,13 @@ interface NZTopoMapProps {
   selectedRunId?: string;
   hoveredRunId?: string;
   onClose?: () => void;
+  // New props for avalanche features
+  showAvalanchePaths?: boolean;
+  avalancheFeatures?: AvalancheFeature[];
+  selectedFeatureId?: string | null;
+  hoveredFeatureId?: string | null;
+  onFeatureSelect?: (featureId: string | null) => void;
+  onFeatureHover?: (featureId: string | null) => void;
 }
 
 interface RunData {
@@ -21,6 +63,7 @@ interface RunData {
   runNumber: number;
   status: 'open' | 'conditional' | 'closed';
   gpxPath: string;
+  subAreaId: string;
   gpxData?: FeatureCollection<LineString>;
 }
 
@@ -71,19 +114,61 @@ function calculateGPXBounds(runs: RunData[]) {
   };
 }
 
+// Calculate bounds for a specific sub-area
+function calculateSubAreaBounds(runs: RunData[], targetSubAreaId: string) {
+  let minLat = Infinity;
+  let maxLat = -Infinity;
+  let minLon = Infinity;
+  let maxLon = -Infinity;
+  let hasData = false;
+
+  runs.forEach(run => {
+    if (run.subAreaId === targetSubAreaId && run.gpxData && run.gpxData.features) {
+      run.gpxData.features.forEach(feature => {
+        if (feature.geometry.type === 'LineString') {
+          const coordinates = feature.geometry.coordinates as number[][];
+          coordinates.forEach(coord => {
+            const [lon, lat] = coord;
+            minLat = Math.min(minLat, lat);
+            maxLat = Math.max(maxLat, lat);
+            minLon = Math.min(minLon, lon);
+            maxLon = Math.max(maxLon, lon);
+            hasData = true;
+          });
+        }
+      });
+    }
+  });
+
+  if (!hasData) return null;
+
+  return {
+    minLat,
+    maxLat,
+    minLon,
+    maxLon
+  };
+}
+
 export default function NZTopoMap({ 
   areaId, 
   subAreaId, 
   selectedRunId,
   hoveredRunId,
   onClose,
+  showAvalanchePaths = false,
+  avalancheFeatures: propAvalancheFeatures = [],
+  selectedFeatureId: _selectedFeatureId,
+  hoveredFeatureId: _hoveredFeatureId,
+  onFeatureSelect: _onFeatureSelect,
+  onFeatureHover: _onFeatureHover,
 }: NZTopoMapProps) {
   const mapRef = useRef<MapRef>(null);
-  const prevRunsDataRef = useRef<Run[]>([]);
+  const gpxCache = useRef<Record<string, FeatureCollection<LineString>>>({});
   const [viewState, setViewState] = useState({
     longitude: 174.0,
     latitude: -41.0,
-    zoom: 11,
+    zoom: 8, // Start with a wider view
     bearing: 0,
     pitch: 0
   });
@@ -94,103 +179,138 @@ export default function NZTopoMap({
   const [mapError, setMapError] = useState<string | null>(null);
   const [useNZTopo, setUseNZTopo] = useState(true);
   const [, setTileLoadError] = useState<string | null>(null);
-  const [hasZoomed, setHasZoomed] = useState(false);
+  const [hasInitialized, setHasInitialized] = useState(false);
+  const [isHoveringAvalanche, setIsHoveringAvalanche] = useState(false);
+  const [avalancheFeatures, setAvalancheFeatures] = useState<AvalancheFeature[]>(propAvalancheFeatures);
+  const [_avalancheLoading, setAvalancheLoading] = useState(false);
+  const [_avalancheError, setAvalancheError] = useState<string | null>(null);
+  const [selectedAvalancheFeature, setSelectedAvalancheFeature] = useState<AvalancheFeature | null>(null);
+  const [isAvalancheModalOpen, setIsAvalancheModalOpen] = useState(false);
 
-  const { data: runsData, isLoading, error: fetchError } = useRunsForArea(areaId, subAreaId);
+  // Fetch ALL runs for the area (not filtered by subAreaId) - skip for avalanche paths
+  const { data: runsData, isLoading, error: fetchError } = useRunsForArea(
+    areaId === 'avalanche-paths' ? '' : areaId
+  );
 
-  // Debug logging
+  // Fetch avalanche features when showAvalanchePaths is true
   useEffect(() => {
-    console.log('NZTopoMap - areaId:', areaId, 'subAreaId:', subAreaId);
-    console.log('NZTopoMap - runsData:', runsData);
-  }, [areaId, subAreaId, runsData]);
+    if (showAvalanchePaths && avalancheFeatures.length === 0) {
+      console.log('🔄 Fetching avalanche features from database...');
+      setAvalancheLoading(true);
+      setAvalancheError(null);
+      
+      // First get available maps, then try to find avalanche features
+      const fetchAvalancheFeatures = async () => {
+        try {
+          // Get available maps first
+          const mapsResponse = await fetch('/api/caltopo/data/maps');
+          const mapsData = await mapsResponse.json();
+          
+          if (!mapsData.maps || mapsData.maps.length === 0) {
+            throw new Error('No CalTopo maps found in database. Please run sync first.');
+          }
+          
+          console.log('📡 Available maps:', mapsData.maps);
+          
+          // Try each map to find avalanche features
+          let avalancheFeaturesFound = [];
+          let lastError = null;
+          
+          for (const map of mapsData.maps) {
+            try {
+              console.log(`🔍 Checking map ${map.id} for avalanche features...`);
+              const response = await fetch(`/api/caltopo/data/avalanche-features?mapId=${map.id}`);
+              const data = await response.json();
+              
+              if (data.success && data.avalancheFeatures && data.avalancheFeatures.length > 0) {
+                console.log(`✅ Found ${data.avalancheFeatures.length} avalanche features in map ${map.id}`);
+                avalancheFeaturesFound = data.avalancheFeatures;
+                break; // Found features, stop searching
+              } else {
+                console.log(`ℹ️ No avalanche features found in map ${map.id}`);
+              }
+            } catch (error) {
+              console.log(`⚠️ Error checking map ${map.id}:`, error);
+              lastError = error;
+            }
+          }
+          
+          if (avalancheFeaturesFound.length > 0) {
+            console.log('✅ Setting avalanche features:', avalancheFeaturesFound);
+            setAvalancheFeatures(avalancheFeaturesFound);
+          } else {
+            const errorMsg = lastError ? (lastError instanceof Error ? lastError.message : String(lastError)) : 'No avalanche features found in any synced maps';
+            console.error('❌ No avalanche features found:', errorMsg);
+            setAvalancheError(errorMsg);
+          }
+        } catch (error) {
+          console.error('❌ Error fetching avalanche features:', error);
+          setAvalancheError(error instanceof Error ? error.message : 'Unknown error');
+        } finally {
+          setAvalancheLoading(false);
+        }
+      };
+      
+      fetchAvalancheFeatures();
+    } else if (!showAvalanchePaths) {
+      console.log('🔄 Clearing avalanche features');
+      setAvalancheFeatures([]);
+    }
+  }, [showAvalanchePaths, avalancheFeatures.length]);
 
-  // Reset zoom flag when subAreaId changes
-  useEffect(() => {
-    setHasZoomed(false);
-  }, [subAreaId]);
-
-  // Process runs data and parse GPX files (only when runs structure changes, not status updates)
+  // Process runs data with GPX caching and memoization
   useEffect(() => {
     if (!runsData || !Array.isArray(runsData)) return;
 
-    // Check if runs structure has actually changed (not just status updates)
-    const hasStructureChanged = 
-      prevRunsDataRef.current.length !== runsData.length ||
-      prevRunsDataRef.current.some((prevRun, index) => {
-        const currentRun = runsData[index];
-        return !currentRun || 
-               prevRun.id !== currentRun.id || 
-               prevRun.gpxPath !== currentRun.gpxPath ||
-               prevRun.name !== currentRun.name ||
-               prevRun.runNumber !== currentRun.runNumber;
-      });
-
-    if (!hasStructureChanged) {
-      // Only update statuses, don't reload the map
-      setRuns(prevRuns => 
-        prevRuns.map(prevRun => {
-          const updatedRun = runsData.find(run => run.id === prevRun.id);
-          if (updatedRun) {
-            return {
-              ...prevRun,
-              status: (updatedRun.status as 'open' | 'conditional' | 'closed') || prevRun.status
-            };
-          }
-          return prevRun;
-        })
-      );
-      return;
-    }
-
-    // Structure has changed, process runs
     const processRuns = async () => {
       setLoading(true);
       setError(null);
 
       try {
-        const processedRuns: RunData[] = [];
+        // Process runs in parallel for better performance
+        const runPromises = runsData.map(async (run) => {
+          if (!run) return null;
 
-        for (const run of runsData) {
-          if (run) {
-            // Fetch actual GPX data from the database path
-            console.log('Processing run:', {
-              id: run.id,
-              name: run.name,
-              runNumber: run.runNumber,
-              gpxPath: run.gpxPath,
-              subAreaId: run.subAreaId
-            });
-            const gpxData = await parseGPXToGeoJSON(run.gpxPath || '', subAreaId, run.runNumber);
-            
-            processedRuns.push({
-              id: run.id || '',
-              name: run.name || '',
-              runNumber: run.runNumber || 0,
-              status: (run.status as 'open' | 'conditional' | 'closed') || 'open',
-              gpxPath: run.gpxPath || '',
-              gpxData
-            });
+          const cacheKey = `${run.gpxPath || ''}-${run.subAreaId || ''}-${run.runNumber || 0}`;
+          
+          let gpxData: FeatureCollection<LineString>;
+          
+          // Check cache first
+          if (gpxCache.current[cacheKey]) {
+            gpxData = gpxCache.current[cacheKey];
+          } else {
+            // Fetch and cache GPX data
+            gpxData = await parseGPXToGeoJSON(run.gpxPath || '', run.subAreaId, run.runNumber);
+            gpxCache.current[cacheKey] = gpxData;
           }
-        }
 
-        console.log('Processed runs for map:', processedRuns.length, 'runs with GPX data');
+          return {
+            id: run.id || '',
+            name: run.name || '',
+            runNumber: run.runNumber || 0,
+            status: (run.status as 'open' | 'conditional' | 'closed') || 'open',
+            gpxPath: run.gpxPath || '',
+            subAreaId: run.subAreaId || '',
+            gpxData
+          } as RunData;
+        });
+
+        const results = await Promise.all(runPromises);
+        const processedRuns = results.filter((run): run is RunData => run !== null);
 
         setRuns(processedRuns);
-        prevRunsDataRef.current = [...runsData];
         
-        // Auto-zoom to GPX bounds only on initial load, not on status updates
-        if (processedRuns.length > 0 && !hasZoomed) {
+        // Initial overview zoom - show ALL GPX files
+        if (processedRuns.length > 0 && !hasInitialized) {
           const bounds = calculateGPXBounds(processedRuns);
           if (bounds) {
-            console.log('Setting up initial view for bounds:', bounds);
-            // Set initial view state to center of bounds
             setViewState(prev => ({
               ...prev,
               longitude: (bounds.minLon + bounds.maxLon) / 2,
               latitude: (bounds.minLat + bounds.maxLat) / 2,
-              zoom: 11 // Higher initial zoom for better area visibility
+              zoom: 8 // Wide overview
             }));
-            setHasZoomed(true);
+            setHasInitialized(true);
           }
         }
       } catch (err) {
@@ -202,23 +322,25 @@ export default function NZTopoMap({
     };
 
     processRuns();
-  }, [runsData, subAreaId, hasZoomed]);
+  }, [runsData, hasInitialized]);
 
+  // Cleanup GPX cache on unmount
+  useEffect(() => {
+    const cache = gpxCache.current;
+    return () => {
+      // Clear all cache entries
+      Object.keys(cache).forEach(key => {
+        delete cache[key];
+      });
+    };
+  }, []);
 
-  // Filter runs with GPX data for rendering
-  const runsWithData = runs.filter(run => run.gpxData);
+  // Handle sub-area zoom when subAreaId changes
+  useEffect(() => {
+    if (!subAreaId || !mapRef.current || runs.length === 0) return;
 
-  // Map click events removed - GPX tracks are no longer clickable
-
-  // Mouse enter/leave handlers removed - GPX tracks are no longer interactive
-
-  // Auto-zoom to appropriate level based on area bounds
-  const autoZoomToArea = useCallback(() => {
-    if (!mapRef.current || runs.length === 0) return;
-
-    const bounds = calculateGPXBounds(runs);
+    const bounds = calculateSubAreaBounds(runs, subAreaId);
     if (bounds) {
-      console.log('Auto-zooming to area bounds:', bounds);
       mapRef.current.fitBounds(
         [
           [bounds.minLon, bounds.minLat],
@@ -227,39 +349,343 @@ export default function NZTopoMap({
         {
           padding: 50,
           maxZoom: 13,
-          duration: 0 // Instant zoom, no animation
+          duration: 1
         }
       );
     }
-  }, [runs]);
+  }, [subAreaId, runs]);
 
-  // Memoized onLoad handlers to prevent infinite re-renders
-  const handleMapLoad = useCallback(() => {
-    console.log('Map loaded successfully');
+  // Filter runs with GPX data for rendering (NO FILTERING - show all runs)
+  const runsWithData = runs.filter(run => run.gpxData);
+
+  // Convert avalanche features to GeoJSON for rendering
+  const avalancheGeoJSON = React.useMemo(() => {
+    console.log('🔄 Converting avalanche features to GeoJSON:', avalancheFeatures);
+    if (!avalancheFeatures || avalancheFeatures.length === 0) {
+      console.log('❌ No avalanche features to convert');
+      return null;
+    }
+
+    const features = avalancheFeatures.map(feature => {
+      console.log(`🗺️ Converting feature to GeoJSON:`, {
+        id: feature.id,
+        title: feature.title,
+        geometryType: feature.geometryType,
+        hasImages: feature.hasImages,
+        imageCount: feature.images?.length || 0
+      });
+      
+      // Parse coordinates if they're stored as string
+      let coords = feature.coordinates;
+      if (typeof coords === 'string') {
+        try {
+          coords = JSON.parse(coords);
+        } catch {
+          console.warn('⚠️ Failed to parse coordinates:', coords);
+          return null;
+        }
+      }
+      
+      if (feature.geometryType === 'LineString' && coords && Array.isArray(coords) && coords.length > 0) {
+        const geoFeature = {
+          type: 'Feature' as const,
+          id: feature.id,
+          properties: {
+            ...feature.properties,
+            id: feature.id,
+            title: feature.title,
+            hasImages: feature.hasImages,
+            class: feature.class
+          },
+          geometry: {
+            type: 'LineString' as const,
+            coordinates: coords as [number, number][]
+          }
+        };
+        console.log(`🗺️ Created LineString feature:`, geoFeature);
+        return geoFeature;
+      } else if (feature.geometryType === 'Point' && coords && Array.isArray(coords) && coords.length >= 2) {
+        const geoFeature = {
+          type: 'Feature' as const,
+          id: feature.id,
+          properties: {
+            ...feature.properties,
+            id: feature.id,
+            title: feature.title,
+            hasImages: feature.hasImages,
+            class: feature.class
+          },
+          geometry: {
+            type: 'Point' as const,
+            coordinates: [coords[0] as unknown as number, coords[1] as unknown as number] as [number, number]
+          }
+        };
+        console.log(`🗺️ Created Point feature:`, geoFeature);
+        return geoFeature;
+      } else if (feature.geometryType === 'Polygon' && coords && Array.isArray(coords) && coords.length > 0) {
+        const geoFeature = {
+          type: 'Feature' as const,
+          id: feature.id,
+          properties: {
+            ...feature.properties,
+            id: feature.id,
+            title: feature.title,
+            hasImages: feature.hasImages,
+            class: feature.class
+          },
+          geometry: {
+            type: 'Polygon' as const,
+            coordinates: coords as unknown as [number, number][][]
+          }
+        };
+        console.log(`🗺️ Created Polygon feature:`, geoFeature);
+        return geoFeature;
+      }
+      console.log(`🗺️ Skipping feature (no valid geometry):`, feature);
+      return null;
+    }).filter((feature): feature is NonNullable<typeof feature> => feature !== null);
+
+    const result = {
+      type: 'FeatureCollection' as const,
+      features
+    };
+    console.log('✅ Generated avalanche GeoJSON:', result);
+    return result;
+  }, [avalancheFeatures]);
+
+  // Handle clicks on avalanche features
+  const handleAvalancheFeatureClick = useCallback((event: MapMouseEvent) => {
+    console.log('🖱️ Avalanche click handler triggered', { showAvalanchePaths, hasMapRef: !!mapRef.current });
     
-    // Auto-zoom to area when map loads
-    if (runs.length > 0) {
-      autoZoomToArea();
+    if (!showAvalanchePaths || !mapRef.current) {
+      console.log('❌ Skipping click - avalanche paths not shown or no map ref');
+      return;
     }
-  }, [runs, autoZoomToArea]);
+    
+    // Query features at the clicked location
+    const features = mapRef.current.queryRenderedFeatures(event.point, {
+      layers: ['avalanche-lines', 'avalanche-points', 'avalanche-polygons', 'avalanche-polygon-outlines']
+    });
+    
+    console.log('🔍 Queried features at click point:', features);
+    
+    if (features && features.length > 0) {
+      // Filter for avalanche features only
+      const avalancheFeature = features.find((f) => 
+        f.layer?.id?.startsWith('avalanche-') && 
+        (f.layer?.id === 'avalanche-lines' || f.layer?.id === 'avalanche-points' || f.layer?.id === 'avalanche-polygons')
+      );
+      
+      console.log('🏔️ Found avalanche feature:', avalancheFeature);
+      
+      if (avalancheFeature) {
+        // Extract the feature ID from the Mapbox feature object
+        const featureId = avalancheFeature.properties?.id || avalancheFeature.id || avalancheFeature.properties?.feature_id;
+        console.log('🔍 Extracted feature ID:', featureId, 'from feature:', avalancheFeature);
+        console.log('🔍 Feature properties:', avalancheFeature.properties);
+        
+        const fullFeature = avalancheFeatures.find(f => f.id === featureId);
+        
+        console.log('🔍 Looking for full feature with ID:', featureId, 'Found:', fullFeature);
+        
+        if (fullFeature) {
+          console.log('✅ Opening modal for feature:', fullFeature.title);
+          setSelectedAvalancheFeature(fullFeature);
+          setIsAvalancheModalOpen(true);
+        } else {
+          console.log('❌ Full feature not found for ID:', featureId);
+          console.log('🔍 Available feature IDs:', avalancheFeatures.map(f => f.id));
+          console.log('🔍 Trying to match by title...');
+          
+          // Try to match by title as fallback
+          const title = avalancheFeature.properties?.title;
+          if (title) {
+            const featureByTitle = avalancheFeatures.find(f => f.title === title);
+            if (featureByTitle) {
+              console.log('✅ Found feature by title:', featureByTitle.title);
+              setSelectedAvalancheFeature(featureByTitle);
+              setIsAvalancheModalOpen(true);
+            } else {
+              console.log('❌ No feature found by title either:', title);
+            }
+          }
+        }
+      } else {
+        console.log('❌ No avalanche feature found in clicked features');
+      }
+    } else {
+      console.log('❌ No features found at click point');
+    }
+  }, [avalancheFeatures, showAvalanchePaths]);
 
-  // Auto-zoom when runs change (but not on status updates)
-  useEffect(() => {
-    if (runs.length > 0 && mapRef.current) {
-      // Immediate auto-zoom for better responsiveness
-      autoZoomToArea();
+  // Handle mouse enter on avalanche features
+  const handleAvalancheFeatureMouseEnter = useCallback((event: MapMouseEvent) => {
+    console.log('🖱️ Mouse enter, showAvalanchePaths:', showAvalanchePaths);
+    if (!showAvalanchePaths) return;
+    
+    if (!mapRef.current) return;
+    
+    // Query features at the mouse location
+    const features = mapRef.current.queryRenderedFeatures(event.point, {
+      layers: ['avalanche-lines', 'avalanche-points', 'avalanche-polygons', 'avalanche-polygon-outlines']
+    });
+    
+    console.log('🖱️ Mouse enter features:', features);
+    if (features && features.length > 0) {
+      const avalancheFeature = features.find((f) => 
+        f.layer?.id?.startsWith('avalanche-') && 
+        (f.layer?.id === 'avalanche-lines' || f.layer?.id === 'avalanche-points' || f.layer?.id === 'avalanche-polygons')
+      );
+      
+      if (avalancheFeature) {
+        console.log('🖱️ Hovering over avalanche feature');
+        setIsHoveringAvalanche(true);
+        if (mapRef.current) {
+          mapRef.current.getCanvas().style.cursor = 'pointer';
+        }
+      }
     }
-  }, [runs, autoZoomToArea]);
+  }, [showAvalanchePaths]);
+
+  // Handle mouse leave on avalanche features
+  const handleAvalancheFeatureMouseLeave = useCallback((event: MapMouseEvent) => {
+    if (!showAvalanchePaths) return;
+    
+    if (!mapRef.current) return;
+    
+    // Query features at the mouse location
+    const features = mapRef.current.queryRenderedFeatures(event.point, {
+      layers: ['avalanche-lines', 'avalanche-points', 'avalanche-polygons', 'avalanche-polygon-outlines']
+    });
+    
+    if (features && features.length === 0) {
+      console.log('🖱️ Mouse left avalanche feature area');
+      setIsHoveringAvalanche(false);
+      if (mapRef.current) {
+        mapRef.current.getCanvas().style.cursor = 'grab';
+      }
+    }
+  }, [showAvalanchePaths]);
+
+  const handleMapLoad = useCallback(() => {
+    // Initial overview zoom when map loads
+    if (areaId === 'avalanche-paths' && avalancheFeatures.length > 0 && !hasInitialized) {
+      // Calculate bounds from avalanche features
+      let minLat = Infinity, maxLat = -Infinity, minLon = Infinity, maxLon = -Infinity;
+      let hasData = false;
+
+      avalancheFeatures.forEach(feature => {
+        console.log('🔍 Processing avalanche feature for bounds:', feature.title, feature.coordinates);
+        
+        let coords = feature.coordinates;
+        
+        // Handle string coordinates (from database)
+        if (typeof coords === 'string') {
+          try {
+            coords = JSON.parse(coords);
+          } catch {
+            console.warn('⚠️ Failed to parse coordinates:', coords);
+            return;
+          }
+        }
+        
+        if (coords && Array.isArray(coords)) {
+          // Handle different geometry types
+          if (feature.geometryType === 'Polygon' && Array.isArray(coords[0])) {
+            // Polygon: coords is [[[lon, lat], [lon, lat], ...]]
+            const polygonCoords = coords[0] as unknown as number[][];
+            polygonCoords.forEach((coord) => {
+              if (Array.isArray(coord) && coord.length >= 2) {
+                const [lon, lat] = coord;
+                if (!isNaN(lon) && !isNaN(lat)) {
+                  minLat = Math.min(minLat, lat);
+                  maxLat = Math.max(maxLat, lat);
+                  minLon = Math.min(minLon, lon);
+                  maxLon = Math.max(maxLon, lon);
+                  hasData = true;
+                }
+              }
+            });
+          } else if (feature.geometryType === 'LineString') {
+            // LineString: coords is [[lon, lat], [lon, lat], ...]
+            const lineCoords = coords as number[][];
+            lineCoords.forEach((coord) => {
+              if (Array.isArray(coord) && coord.length >= 2) {
+                const [lon, lat] = coord;
+                if (!isNaN(lon) && !isNaN(lat)) {
+                  minLat = Math.min(minLat, lat);
+                  maxLat = Math.max(maxLat, lat);
+                  minLon = Math.min(minLon, lon);
+                  maxLon = Math.max(maxLon, lon);
+                  hasData = true;
+                }
+              }
+            });
+          } else if (feature.geometryType === 'Point') {
+            // Point: coords is [lon, lat]
+            if (Array.isArray(coords) && coords.length >= 2) {
+              const lon = coords[0] as unknown as number;
+              const lat = coords[1] as unknown as number;
+              if (!isNaN(lon) && !isNaN(lat)) {
+                minLat = Math.min(minLat, lat);
+                maxLat = Math.max(maxLat, lat);
+                minLon = Math.min(minLon, lon);
+                maxLon = Math.max(maxLon, lon);
+                hasData = true;
+              }
+            }
+          }
+        }
+      });
+
+      if (hasData && mapRef.current) {
+        console.log('🗺️ Setting map bounds:', { minLon, minLat, maxLon, maxLat });
+        mapRef.current.fitBounds(
+          [
+            [minLon, minLat] as [number, number],
+            [maxLon, maxLat] as [number, number]
+          ],
+          {
+            padding: 100,
+            maxZoom: 8,
+            duration: 1000
+          }
+        );
+        setHasInitialized(true);
+      } else {
+        console.warn('⚠️ No valid coordinates found for avalanche features, using default view');
+        // Set a default view for New Zealand if no valid coordinates
+        if (mapRef.current) {
+          mapRef.current.setCenter([174.0, -41.0]);
+          mapRef.current.setZoom(6);
+          setHasInitialized(true);
+        }
+      }
+    } else if (runs.length > 0 && !hasInitialized) {
+      const bounds = calculateGPXBounds(runs);
+      if (bounds) {
+        mapRef.current?.fitBounds(
+          [
+            [bounds.minLon, bounds.minLat],
+            [bounds.maxLon, bounds.maxLat]
+          ],
+          {
+            padding: 100,
+            maxZoom: 8,
+            duration: 1000
+          }
+        );
+      }
+    }
+  }, [runs, hasInitialized, areaId, avalancheFeatures]);
 
   const handleNZTopoSourceLoad = useCallback(() => {
-    console.log('NZ Topo source loaded successfully');
     setTileLoadError(null);
   }, []);
 
   const handleNZTopoSourceError = useCallback((error: unknown) => {
     console.error('NZ Topo source error:', error);
     setTileLoadError('Failed to load NZ Topo tiles - falling back to Mapbox');
-    // Fallback to Mapbox style
     setTimeout(() => {
       setUseNZTopo(false);
     }, 2000);
@@ -268,7 +694,6 @@ export default function NZTopoMap({
   const handleMapError = useCallback((evt: unknown) => {
     console.error('Map error:', evt);
     
-    // Handle specific Mapbox GL JS chunk loading errors
     if (evt && typeof evt === 'object' && 'error' in evt) {
       const error = (evt as { error: { message?: string } }).error;
       if (error && error.message && error.message.includes('Failed to load chunk')) {
@@ -283,75 +708,6 @@ export default function NZTopoMap({
   const handleMapMove = useCallback((evt: { viewState: typeof viewState }) => {
     setViewState(evt.viewState);
   }, []);
-
-  // Update map styles when runs change (optimized for status updates)
-  useEffect(() => {
-    if (!mapRef.current || runs.length === 0) return;
-
-    const updateMapStyles = () => {
-      const map = mapRef.current?.getMap();
-      if (!map) return;
-
-      runs.forEach(run => {
-        if (run.gpxData) {
-          const layerId = `run-${run.id}-track`;
-          const isHighlighted = highlightedRunId === run.id || selectedRunId === run.id || hoveredRunId === run.id;
-          
-          try {
-            if (map.getLayer(layerId)) {
-              // Only update if the layer exists
-              map.setPaintProperty(layerId, 'line-color', STATUS_COLORS[run.status]);
-              map.setPaintProperty(layerId, 'line-width', isHighlighted ? 5 : 3);
-              map.setPaintProperty(layerId, 'line-opacity', isHighlighted ? STATUS_OPACITY.highlighted : STATUS_OPACITY.normal);
-            }
-          } catch (error) {
-            console.warn('Failed to update map styles:', error);
-          }
-        }
-      });
-    };
-
-    // Use requestAnimationFrame for smoother updates
-    const rafId = requestAnimationFrame(updateMapStyles);
-
-    return () => cancelAnimationFrame(rafId);
-  }, [runs, highlightedRunId, selectedRunId, hoveredRunId]);
-
-  // Handle map style load to ensure layers are available
-  useEffect(() => {
-    const map = mapRef.current?.getMap();
-    if (!map) return;
-
-    const handleStyleLoad = () => {
-      // Re-apply styles when map style loads
-      const updateMapStyles = () => {
-        runsWithData.forEach(run => {
-          if (run.gpxData) {
-            const layerId = `run-${run.id}-track`;
-            const isHighlighted = highlightedRunId === run.id || selectedRunId === run.id || hoveredRunId === run.id;
-            
-            try {
-              if (map.getLayer(layerId)) {
-                map.setPaintProperty(layerId, 'line-color', STATUS_COLORS[run.status]);
-                map.setPaintProperty(layerId, 'line-width', isHighlighted ? 5 : 3);
-                map.setPaintProperty(layerId, 'line-opacity', isHighlighted ? STATUS_OPACITY.highlighted : STATUS_OPACITY.normal);
-              }
-            } catch (error) {
-              console.warn('Failed to update map styles on style load:', error);
-            }
-          }
-        });
-      };
-
-      requestAnimationFrame(updateMapStyles);
-    };
-    
-    map.on('style.load', handleStyleLoad);
-    
-    return () => {
-      map.off('style.load', handleStyleLoad);
-    };
-  }, [runsWithData, highlightedRunId, selectedRunId, hoveredRunId]);
 
   // Check for Mapbox access token
   const mapboxToken = process.env.NEXT_PUBLIC_MAPBOX_ACCESS_TOKEN;
@@ -381,7 +737,7 @@ export default function NZTopoMap({
     );
   }
 
-  if (isLoading || loading) {
+  if ((isLoading || loading) && areaId !== 'avalanche-paths') {
     return (
       <div className="flex items-center justify-center h-full bg-muted/20">
         <div className="flex flex-col items-center space-y-4">
@@ -392,7 +748,7 @@ export default function NZTopoMap({
     );
   }
 
-  if (runs.length === 0) {
+  if (runs.length === 0 && areaId !== 'avalanche-paths') {
     return (
       <div className="flex items-center justify-center h-full bg-muted/20">
         <div className="flex flex-col items-center space-y-4 text-center">
@@ -432,7 +788,6 @@ export default function NZTopoMap({
 
   return (
     <div className="relative h-full w-full min-h-[400px] sm:min-h-[500px]">
-      {/* Map Container */}
       <div className="h-full w-full">
         <Map
           ref={mapRef}
@@ -440,123 +795,226 @@ export default function NZTopoMap({
           onMove={handleMapMove}
           onError={handleMapError}
           onLoad={handleMapLoad}
+          onClick={showAvalanchePaths ? handleAvalancheFeatureClick : (event) => {
+            console.log('🖱️ Map clicked (no avalanche paths)', event.point);
+          }}
+          onMouseEnter={showAvalanchePaths ? handleAvalancheFeatureMouseEnter : undefined}
+          onMouseLeave={showAvalanchePaths ? handleAvalancheFeatureMouseLeave : undefined}
           mapboxAccessToken={mapboxToken}
           style={{ width: '100%', height: '100%' }}
           mapStyle="mapbox://styles/mapbox/outdoors-v12"
         >
-            {/* NZ Topo 50 Base Layer - Rendered First */}
-            {useNZTopo && (
-              <Source
-                id="nz-topo-source"
-                type="raster"
-                tiles={[
-                  `https://basemaps.linz.govt.nz/v1/tiles/topo-raster/WebMercatorQuad/{z}/{x}/{y}.webp?api=c01k5mkf2a6g80h6va1rny04y0m`,
-                  
-                ]}
-                tileSize={256}
-                attribution="© LINZ CC BY 4.0"
-                onError={handleNZTopoSourceError}
-                onLoad={handleNZTopoSourceLoad}
-              >
-                <Layer
-                  id="nz-topo-layer"
-                  type="raster"
-                  paint={{
-                    'raster-opacity': 1
-                  }}
-                />
-              </Source>
-            )}
-
-            {/* GPX Track Layers */}
-        {runsWithData.map(run => {
-          if (!run.gpxData) return null;
-
-          const isHighlighted = highlightedRunId === run.id || selectedRunId === run.id || hoveredRunId === run.id;
-          const layerId = `run-${run.id}-track`;
-
-          return (
-            <Source 
-              key={`${run.id}-${run.status}`} 
-              id={`run-${run.id}-source`} 
-              type="geojson" 
-                    data={run.gpxData}
+          {/* NZ Topo 50 Base Layer */}
+          {useNZTopo && (
+            <Source
+              id="nz-topo-source"
+              type="raster"
+              tiles={[
+                `https://basemaps.linz.govt.nz/v1/tiles/topo-raster/WebMercatorQuad/{z}/{x}/{y}.webp?api=c01k5mkf2a6g80h6va1rny04y0m`,
+              ]}
+              tileSize={256}
+              attribution="© LINZ CC BY 4.0"
+              onError={handleNZTopoSourceError}
+              onLoad={handleNZTopoSourceLoad}
+              minzoom={0}
+  maxzoom={18}
+  bounds={[166.0, -48.0, 180.0, -34.0]} // NZ bounds to limit tile requests
             >
               <Layer
-                id={layerId}
-                type="line"
+                id="nz-topo-layer"
+                type="raster"
                 paint={{
-                  'line-color': STATUS_COLORS[run.status],
-                  'line-width': isHighlighted ? 5 : 3,
-                  'line-opacity': isHighlighted ? STATUS_OPACITY.highlighted : STATUS_OPACITY.normal
-                }}
-                layout={{
-                  'line-join': 'round',
-                  'line-cap': 'round'
+                  'raster-opacity': 1,
+                  'raster-fade-duration': 0 
                 }}
               />
             </Source>
-          );
-        })}
+          )}
 
-        {/* Run Number Labels - positioned at the start of each track */}
-        {runsWithData.map(run => {
-          if (!run.gpxData || !run.gpxData.features || run.gpxData.features.length === 0) return null;
+          {/* GPX Track Layers - ALL RUNS VISIBLE */}
+          {runsWithData.map(run => {
+            if (!run.gpxData) return null;
 
-          // Create a point feature at the start of the track for the label
-          const firstFeature = run.gpxData.features[0];
-          if (!firstFeature.geometry || firstFeature.geometry.type !== 'LineString') return null;
+            const isHighlighted = highlightedRunId === run.id || selectedRunId === run.id || hoveredRunId === run.id;
+            const layerId = `run-${run.id}-track`;
 
-          const coordinates = firstFeature.geometry.coordinates as number[][];
-          if (coordinates.length === 0) return null;
+            return (
+              <Source 
+                key={`${run.id}-${run.status}`} 
+                id={`run-${run.id}-source`} 
+                type="geojson" 
+                data={run.gpxData}
+              >
+                <Layer
+                  id={layerId}
+                  type="line"
+                  paint={{
+                    'line-color': STATUS_COLORS[run.status],
+                    'line-width': isHighlighted ? 5 : 3,
+                    'line-opacity': isHighlighted ? STATUS_OPACITY.highlighted : STATUS_OPACITY.normal
+                  }}
+                  layout={{
+                    'line-join': 'round',
+                    'line-cap': 'round'
+                  }}
+                />
+              </Source>
+            );
+          })}
 
-          const startPoint = coordinates[0];
-          const labelData: FeatureCollection<Point> = {
-            type: 'FeatureCollection',
-            features: [{
-              type: 'Feature',
-              properties: {
-                runId: run.id,
-                runNumber: run.runNumber,
-                status: run.status
-              },
-              geometry: {
-                type: 'Point',
-                coordinates: startPoint
-              }
-            }]
-          };
+          {/* Run Number Labels - ALL RUNS VISIBLE */}
+          {runsWithData.map(run => {
+            if (!run.gpxData || !run.gpxData.features || run.gpxData.features.length === 0) return null;
 
-          return (
+            const firstFeature = run.gpxData.features[0];
+            if (!firstFeature.geometry || firstFeature.geometry.type !== 'LineString') return null;
+
+            const coordinates = firstFeature.geometry.coordinates as number[][];
+            if (coordinates.length === 0) return null;
+
+            const startPoint = coordinates[0];
+            const labelData: FeatureCollection<Point> = {
+              type: 'FeatureCollection',
+              features: [{
+                type: 'Feature',
+                properties: {
+                  runId: run.id,
+                  runNumber: run.runNumber,
+                  status: run.status
+                },
+                geometry: {
+                  type: 'Point',
+                  coordinates: startPoint
+                }
+              }]
+            };
+
+            return (
+              <Source 
+                key={`label-${run.id}-${run.status}`} 
+                id={`run-${run.id}-label-source`} 
+                type="geojson" 
+                data={labelData}
+              >
+                <Layer
+                  id={`run-${run.id}-label`}
+                  type="symbol"
+                  layout={{
+                    'text-field': run.runNumber.toString(),
+                    'text-size': 14,
+                    'text-offset': [0, -1.5],
+                    'text-anchor': 'center',
+                    'text-allow-overlap': true
+                  }}
+                  paint={{
+                    'text-color': '#ffffff',
+                    'text-halo-color': STATUS_COLORS[run.status],
+                    'text-halo-width': 2
+                  }}
+                />
+              </Source>
+            );
+          })}
+
+          {/* Avalanche Features */}
+          {showAvalanchePaths && avalancheGeoJSON && (() => {
+            console.log('🗺️ Rendering avalanche features on map:', avalancheGeoJSON);
+            console.log('🗺️ Feature count:', avalancheGeoJSON.features.length);
+            return true;
+          })() && (
             <Source 
-              key={`label-${run.id}-${run.status}`} 
-              id={`run-${run.id}-label-source`} 
+              id="avalanche-features-source" 
               type="geojson" 
-              data={labelData}
+              data={avalancheGeoJSON}
             >
+              {/* LineString features (paths) */}
               <Layer
-                id={`run-${run.id}-label`}
+                id="avalanche-lines"
+                type="line"
+                filter={['==', ['geometry-type'], 'LineString']}
+                paint={{
+                  'line-color': '#ff6b6b',
+                  'line-width': isHoveringAvalanche ? 4 : 3,
+                  'line-opacity': isHoveringAvalanche ? 1.0 : 0.8
+                }}
+                layout={{
+                  'line-cap': 'round',
+                  'line-join': 'round'
+                }}
+              />
+              
+              {/* Point features (markers) */}
+              <Layer
+                id="avalanche-points"
+                type="circle"
+                filter={['==', ['geometry-type'], 'Point']}
+                paint={{
+                  'circle-color': '#ff6b6b',
+                  'circle-radius': isHoveringAvalanche ? 8 : 6,
+                  'circle-opacity': isHoveringAvalanche ? 1.0 : 0.8,
+                  'circle-stroke-color': '#ffffff',
+                  'circle-stroke-width': isHoveringAvalanche ? 3 : 2
+                }}
+              />
+              
+              {/* Polygon features (areas) */}
+              <Layer
+                id="avalanche-polygons"
+                type="fill"
+                filter={['==', ['geometry-type'], 'Polygon']}
+                paint={{
+                  'fill-color': '#ff6b6b',
+                  'fill-opacity': isHoveringAvalanche ? 0.5 : 0.3
+                }}
+              />
+              
+              {/* Polygon outlines */}
+              <Layer
+                id="avalanche-polygon-outlines"
+                type="line"
+                filter={['==', ['geometry-type'], 'Polygon']}
+                paint={{
+                  'line-color': '#ff6b6b',
+                  'line-width': isHoveringAvalanche ? 3 : 2,
+                  'line-opacity': isHoveringAvalanche ? 1.0 : 0.8
+                }}
+                layout={{
+                  'line-cap': 'round',
+                  'line-join': 'round'
+                }}
+              />
+              
+              {/* Feature labels */}
+              <Layer
+                id="avalanche-labels"
                 type="symbol"
                 layout={{
-                  'text-field': run.runNumber.toString(),
-                  'text-size': 14,
-                  'text-offset': [0, -1.5],
-                  'text-anchor': 'center',
-                  'text-allow-overlap': true
+                  'text-field': ['get', 'title'],
+                  'text-font': ['Open Sans Bold', 'Arial Unicode MS Bold'],
+                  'text-size': 12,
+                  'text-anchor': 'top',
+                  'text-offset': [0, 1]
                 }}
                 paint={{
                   'text-color': '#ffffff',
-                  'text-halo-color': STATUS_COLORS[run.status],
+                  'text-halo-color': '#000000',
                   'text-halo-width': 2
                 }}
               />
             </Source>
-          );
-        })}
+          )}
         </Map>
       </div>
-
       
+      {/* Avalanche Feature Modal */}
+      <AvalancheFeatureModal
+        isOpen={isAvalancheModalOpen}
+        onClose={() => {
+          setIsAvalancheModalOpen(false);
+          setSelectedAvalancheFeature(null);
+        }}
+        feature={selectedAvalancheFeature}
+      />
     </div>
   );
 }

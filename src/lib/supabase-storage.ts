@@ -22,7 +22,7 @@ const supabase = createClient(
   supabaseAnonKey || 'placeholder-anon-key'
 );
 
-export const BUCKET_NAME = 'gpx';
+export const BUCKET_NAME = 'heli-ski-files';
 
 export interface GPXFile {
   path: string;
@@ -39,7 +39,7 @@ export async function uploadGPX(
   featureId: string, 
   gpxContent: string
 ): Promise<{ path: string; checksum: string }> {
-  const path = `gpx/${mapId}/${featureId}.gpx`;
+  const path = `runs/${mapId}/${featureId}.gpx`;
   
   // Calculate SHA-256 checksum
   const encoder = new TextEncoder();
@@ -67,7 +67,7 @@ export async function uploadGPX(
  * Get GPX content from Supabase Storage
  */
 export async function getGPX(mapId: string, featureId: string): Promise<GPXFile | null> {
-  const path = `gpx/${mapId}/${featureId}.gpx`;
+  const path = `runs/${mapId}/${featureId}.gpx`;
   
   const { data, error } = await supabaseAdmin.storage
     .from(BUCKET_NAME)
@@ -89,7 +89,7 @@ export async function getGPX(mapId: string, featureId: string): Promise<GPXFile 
   // Get file metadata
   const { data: fileData } = await supabaseAdmin.storage
     .from(BUCKET_NAME)
-    .list(`gpx/${mapId}`, {
+    .list(`runs/${mapId}`, {
       search: `${featureId}.gpx`
     });
 
@@ -113,7 +113,7 @@ export async function getSignedGPXUrl(
   featureId: string, 
   expiresIn: number = 3600 // 1 hour default
 ): Promise<string> {
-  const path = `gpx/${mapId}/${featureId}.gpx`;
+  const path = `runs/${mapId}/${featureId}.gpx`;
   
   const { data, error } = await supabase.storage
     .from(BUCKET_NAME)
@@ -134,7 +134,7 @@ export async function gpxExists(mapId: string, featureId: string): Promise<boole
   
   const { data, error } = await supabaseAdmin.storage
     .from(BUCKET_NAME)
-    .list(`gpx/${mapId}`, {
+    .list(`runs/${mapId}`, {
       search: `${featureId}.gpx`
     });
 
@@ -145,7 +145,7 @@ export async function gpxExists(mapId: string, featureId: string): Promise<boole
  * Delete GPX file
  */
 export async function deleteGPX(mapId: string, featureId: string): Promise<void> {
-  const path = `gpx/${mapId}/${featureId}.gpx`;
+  const path = `runs/${mapId}/${featureId}.gpx`;
   
   const { error } = await supabaseAdmin.storage
     .from(BUCKET_NAME)
@@ -162,7 +162,7 @@ export async function deleteGPX(mapId: string, featureId: string): Promise<void>
 export async function listMapGPXFiles(mapId: string): Promise<string[]> {
   const { data, error } = await supabaseAdmin.storage
     .from(BUCKET_NAME)
-    .list(`gpx/${mapId}`);
+    .list(`runs/${mapId}`);
 
   if (error || !data) {
     return [];
@@ -188,7 +188,7 @@ export async function initializeStorageBucket(): Promise<void> {
   
   if (!bucketExists) {
     const { error: createError } = await supabaseAdmin.storage.createBucket(BUCKET_NAME, {
-      public: false, // Private bucket
+      public: true, // Public bucket for direct URL access
       fileSizeLimit: 10 * 1024 * 1024, // 10MB limit
       allowedMimeTypes: ['application/gpx+xml', 'text/xml', 'application/xml']
     });

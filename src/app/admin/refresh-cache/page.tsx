@@ -63,28 +63,32 @@ export default function RefreshCachePage() {
     }
   };
 
+
   return (
     <div className="container mx-auto p-6 space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-3xl font-bold">GPX Cache Refresh</h1>
+          <h1 className="text-3xl font-bold">Cache Refresh</h1>
           <p className="text-muted-foreground">
             Manually refresh cached GPX files from CalTopo
           </p>
         </div>
-        <Button
-          onClick={handleRefresh}
-          disabled={isRefreshing}
-          className="flex items-center gap-2"
-        >
-          {isRefreshing ? (
-            <RefreshCw className="w-4 h-4 animate-spin" />
-          ) : (
-            <RefreshCw className="w-4 h-4" />
-          )}
-          {isRefreshing ? 'Refreshing...' : 'Refresh Cache'}
-        </Button>
+        <div className="flex gap-2">
+          <Button
+            onClick={handleRefresh}
+            disabled={isRefreshing}
+            className="flex items-center gap-2"
+          >
+            {isRefreshing ? (
+              <RefreshCw className="w-4 h-4 animate-spin" />
+            ) : (
+              <RefreshCw className="w-4 h-4" />
+            )}
+            {isRefreshing ? 'Refreshing...' : 'Refresh Cache'}
+          </Button>
+        </div>
       </div>
+
 
       {/* Results */}
       {lastResult && (

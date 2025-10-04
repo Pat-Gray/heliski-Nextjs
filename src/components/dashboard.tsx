@@ -7,16 +7,30 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
-import { Mountain,CheckCircle, MapPin, GripVertical } from "lucide-react";
+import { Mountain,CheckCircle, MapPin, GripVertical, Plus, Printer, Loader2 } from "lucide-react";
 import { useToast } from "@/contexts/hooks/use-toast";
 import { apiRequest, queryFn } from "@/lib/queryClient";
 import RunDetailView from "@/components/run-detail-view";
 import RunDetailSideModal from "@/components/modals/run-detail-side-modal";
-import NZTopoMap from "@/components/maps/nz-topo-map";
+import dynamic from "next/dynamic";
+
+const NZTopoMap = dynamic(() => import("@/components/maps/nz-topo-map"), {
+  ssr: false,
+  loading: () => (
+    <div className="flex items-center justify-center h-full bg-muted/20">
+      <div className="flex flex-col items-center space-y-4 text-center">
+        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+        <div>
+          <p className="text-sm font-medium">Loading map...</p>
+          <p className="text-xs text-muted-foreground">Initializing map component</p>
+        </div>
+      </div>
+    </div>
+  )
+});
 import DashboardFilters from "@/components/dashboard-filters";
 import { usePrint } from "@/components/print-provider";
 import type { Run, InsertDailyPlan, Area, SubArea } from "@/lib/schemas/schema";
-import { Loader2 } from "lucide-react";
 
 export default function Dashboard() {
   const [selectedRunId] = useState<string | null>(null);
@@ -26,9 +40,10 @@ export default function Dashboard() {
   const [showConfirmationModal, setShowConfirmationModal] = useState(false);
   const [existingDailyPlan, setExistingDailyPlan] = useState<{ id: string } | null>(null);
   const [showOverrideOption, setShowOverrideOption] = useState(false);
-  const [showMap, setShowMap] = useState(false);
+  const [showMap, setShowMap] = useState(true); // Start with map visible
   const [selectedAreaForMap, setSelectedAreaForMap] = useState<string | null>(null);
   const [selectedSubAreaForMap, setSelectedSubAreaForMap] = useState<string | null>(null);
+  const [showAvalanchePaths, setShowAvalanchePaths] = useState(false);
   const [statusCommentInputs, setStatusCommentInputs] = useState<Record<string, string>>({});
   const updateTimeoutsRef = useRef<Record<string, NodeJS.Timeout>>({});
   const [hoveredRunId, setHoveredRunId] = useState<string | null>(null);
@@ -97,16 +112,6 @@ export default function Dashboard() {
     updateTimeoutsRef.current = {};
   }, [selectedAreas]);
 
-  // Listen for submit daily plan event from app-layout
-  useEffect(() => {
-    const handleSubmitDailyPlan = () => {
-      console.log('📋 Submit Daily Plan event received from app-layout');
-      _handleSubmitDailyPlan();
-    };
-
-    window.addEventListener('submit-daily-plan', handleSubmitDailyPlan);
-    return () => window.removeEventListener('submit-daily-plan', handleSubmitDailyPlan);
-  });
 
   const { data: runs = [] } = useQuery<Run[]>({
     queryKey: ["/api/runs"],
@@ -135,10 +140,16 @@ export default function Dashboard() {
     const newSelected = new Set(selectedAreas);
     if (newSelected.has(areaId)) {
       newSelected.delete(areaId);
-      if (selectedAreaForMap === areaId) {
-        setShowMap(false);
+      // If this was the only selected area, keep map visible but clear selection
+      if (newSelected.size === 0) {
         setSelectedAreaForMap(null);
         setSelectedSubAreaForMap(null);
+      } else if (selectedAreaForMap === areaId) {
+        // If this was the map area, switch to another selected area
+        const remainingArea = areas.find(area => newSelected.has(area.id));
+        if (remainingArea) {
+          setSelectedAreaForMap(remainingArea.id);
+        }
       }
     } else {
       newSelected.add(areaId);
@@ -291,10 +302,8 @@ export default function Dashboard() {
   const saveComment = (runId: string) => {
     const comment = statusCommentInputs[runId] || '';
     console.log('Saving comment for run:', runId, 'comment:', comment);
-    if (comment.trim()) {
-      // Use optimistic updates for comment saving
+    // Always save the comment, even if empty (to clear it)
       updateRunStatusMutation.mutate({ runId, status: 'conditional', statusComment: comment });
-    }
   };
 
   // Auto-save comment with debouncing - completely seamless
@@ -307,17 +316,96 @@ export default function Dashboard() {
     // Set a new timeout for auto-save
     updateTimeoutsRef.current[runId] = setTimeout(() => {
       const comment = statusCommentInputs[runId] || '';
-      if (comment.trim()) {
         console.log('Auto-saving comment for run:', runId, 'comment:', comment);
-        // Save seamlessly without any visual indicators
+      // Save seamlessly without any visual indicators (including empty comments)
         updateRunStatusMutation.mutate({ 
           runId, 
           status: 'conditional', 
           statusComment: comment 
         });
-      }
     }, 300); // Very fast auto-save for seamless experience
   };
+  // Sync CalTopo comments function
+  const syncCalTopoComments = async (runs: typeof filteredRuns) => {
+    try {
+      console.log('💬 Syncing CalTopo comments...');
+      
+      const currentDate = new Date().toISOString().split('T')[0];
+      const commentPromises = runs.map(async (run) => {
+        try {
+          // Format status comment based on run status
+          let statusCommentHeader;
+          
+          if (run.status === 'conditional' && run.statusComment && run.statusComment.trim()) {
+            statusCommentHeader = `--- Status Updated: ${currentDate} ---\n${run.statusComment.trim()}\n---`;
+          } else if (run.status === 'open' || run.status === 'closed') {
+            // For open and closed, only show status and date
+            statusCommentHeader = `--- Status Updated: ${currentDate} ---`;
+          } else {
+            statusCommentHeader = `--- Status Updated: ${currentDate} ---`;
+          }
+          
+          // Get current CalTopo comments
+          let currentCalTopoComments = run.runNotes || '';
+          
+          // Clean existing status comments - comprehensive approach
+          let cleanedNotes = currentCalTopoComments;
+          
+          // Remove all status comment blocks completely
+          // This regex matches from "--- Status Updated:" to the end of the string
+          cleanedNotes = cleanedNotes.replace(/--- Status Updated:[\s\S]*$/g, '');
+          
+          // Clean up any remaining whitespace and newlines
+          cleanedNotes = cleanedNotes
+            .replace(/^\s*\n+|\n+\s*$/g, '')
+            .replace(/\n{3,}/g, '\n\n')
+            .trim();
+          
+          const updatedNotes = `${statusCommentHeader}\n\n${cleanedNotes}`;
+          
+          // Update CalTopo comments
+          const syncResponse = await fetch('/api/caltopo/update-feature-comments', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              mapId: run.caltopoMapId,
+              featureId: run.caltopoFeatureId,
+              comments: updatedNotes
+            })
+          });
+          
+          if (syncResponse.ok) {
+            // Update local database
+            await fetch(`/api/runs/${run.id}`, {
+              method: 'PATCH',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ runNotes: updatedNotes })
+            });
+            
+            console.log(`✅ Updated comments for run ${run.name}`);
+            return { success: true, runId: run.id };
+          } else {
+            throw new Error(`HTTP ${syncResponse.status}`);
+          }
+        } catch (error) {
+          console.error(`❌ Failed to sync comments for run ${run.name}:`, error);
+          return { success: false, runId: run.id, error: error instanceof Error ? error.message : 'Unknown error' };
+        }
+      });
+      
+      const results = await Promise.all(commentPromises);
+      const successful = results.filter(r => r.success).length;
+      const failed = results.filter(r => !r.success).length;
+      
+      console.log(`💬 Comment sync completed: ${successful} successful, ${failed} failed`);
+      return { successful, failed, results };
+      
+    } catch (error) {
+      console.error('❌ CalTopo comment sync failed:', error);
+      throw error;
+    }
+  };
+
   // Sync CalTopo styles function
   const syncCalTopoStyles = async () => {
     try {
@@ -339,38 +427,15 @@ export default function Dashboard() {
 
       const result = await response.json();
       
-      console.log('✅ CalTopo sync result:', result);
-      
       if (result.success) {
-        const { updated, skippedUnlinked, failed, mapsUpdated } = result;
-        
-        let message = `CalTopo sync completed: ${updated} runs updated`;
-        if (skippedUnlinked.length > 0) {
-          message += `, ${skippedUnlinked.length} runs skipped (not linked to CalTopo)`;
-        }
-        if (failed.length > 0) {
-          message += `, ${failed.length} runs failed to sync`;
-        }
-        if (mapsUpdated.length > 0) {
-          message += `, ${mapsUpdated.length} maps updated`;
-        }
-        
-        toast({
-          title: "CalTopo sync completed",
-          description: message,
-          variant: failed.length > 0 ? "destructive" : "default"
-        });
+        console.log(`🎨 Style sync completed: ${result.updated} updated, ${result.failed} failed`);
+        return result;
       } else {
         throw new Error(result.error || 'Unknown sync error');
       }
-    } catch (error: unknown) {
-      console.error('❌ CalTopo sync failed:', error);
-      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-      toast({
-        title: "CalTopo sync failed",
-        description: `Could not sync run statuses to CalTopo: ${errorMessage}`,
-        variant: "destructive"
-      });
+    } catch (error) {
+      console.error('❌ CalTopo style sync failed:', error);
+      throw error;
     }
   };
   
@@ -396,45 +461,24 @@ export default function Dashboard() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/daily-plans"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/runs"] }); // Refresh runs data
       toast({ 
         title: "Daily plan submitted successfully", 
         description: "All current run statuses and comments have been saved as a structured snapshot."
       });
-      // Set print data and trigger print
+      
+      // Set print data for daily plan
       const printData = {
         areas,
         subAreas,
         filteredRuns,
         selectedAreas,
-        currentDate: currentDate || new Date().toLocaleDateString('en-US', { 
-          year: 'numeric', 
-          month: 'long', 
-          day: 'numeric' 
-        }),
+        currentDate: currentDate || new Date().toISOString().split('T')[0],
         greenCount,
         orangeCount,
         redCount,
       };
-      
-      console.log('🖨️ Setting print data:', printData);
       setPrintData(printData);
-      
-      // Single print attempt with proper timing
-      setTimeout(() => {
-        console.log('🖨️ Triggering print...');
-        try {
-          triggerPrint();
-          console.log('✅ Print triggered successfully');
-        } catch (error) {
-          console.error('❌ Print trigger failed:', error);
-          // Fallback: try direct window.print()
-          console.log('🖨️ Fallback: trying window.print() directly...');
-          window.print();
-        }
-      }, 500); // Single delay to ensure print data is set
-
-      // Sync CalTopo styles after successful daily plan submission
-      syncCalTopoStyles();
     },
   });
   
@@ -446,12 +490,9 @@ export default function Dashboard() {
 
   // Set current date on client side to avoid hydration mismatch
   useEffect(() => {
-    setCurrentDate(new Date().toLocaleDateString('en-US', { 
-      year: 'numeric', 
-      month: 'long', 
-      day: 'numeric' 
-    }));
+    setCurrentDate(new Date().toISOString().split('T')[0]);
   }, []);
+
 
   // Handle screen size changes
   useEffect(() => {
@@ -549,22 +590,44 @@ export default function Dashboard() {
       return summary;
     }).join('\n');
     
-    const planNotes = `Daily Plan Summary - ${currentDate || new Date().toLocaleDateString('en-US', { 
-      year: 'numeric', 
-      month: 'long', 
-      day: 'numeric' 
-    })}\n\nRun Status:\n${statusSummary}`;
+    const planNotes = `Daily Plan Summary - ${currentDate || new Date().toISOString().split('T')[0]}\n\nRun Status:\n${statusSummary}`;
     
     // Normalize date to avoid timezone issues
     const normalizedDate = new Date();
     normalizedDate.setHours(0, 0, 0, 0);
     
-    console.log('Creating daily plan with data:', {
-      planDate: normalizedDate.toISOString(),
-      runIds: filteredRuns.map(run => run.id),
-      statusSnapshot,
-      notes: planNotes,
-    });
+    // Update CalTopo comments and styles for ALL runs with CalTopo integration
+    const runsToSync = filteredRuns.filter(run => run.caltopoMapId && run.caltopoFeatureId);
+    
+    if (runsToSync.length > 0) {
+      console.log(`🔄 Syncing ${runsToSync.length} runs to CalTopo...`);
+      
+      // Sync CalTopo comments and styles in parallel (non-blocking)
+      const caltopoSyncPromises = [
+        // Sync status comments
+        syncCalTopoComments(runsToSync),
+        // Sync feature styles/colors
+        syncCalTopoStyles()
+      ];
+      
+      // Don't block daily plan creation - run in background
+      Promise.allSettled(caltopoSyncPromises).then((results) => {
+        const commentResult = results[0];
+        const styleResult = results[1];
+        
+        if (commentResult.status === 'fulfilled') {
+          console.log('✅ CalTopo comments synced successfully');
+        } else {
+          console.error('❌ CalTopo comments sync failed:', commentResult.reason);
+        }
+        
+        if (styleResult.status === 'fulfilled') {
+          console.log('✅ CalTopo styles synced successfully');
+        } else {
+          console.error('❌ CalTopo styles sync failed:', styleResult.reason);
+        }
+      });
+    }
     
     submitDailyPlanMutation.mutate({
       planDate: normalizedDate,
@@ -613,13 +676,7 @@ export default function Dashboard() {
                   {selectedAreas.size > 0 && (
                     <>
                       <DashboardFilters onApplyRiskAssessment={handleAvalancheRiskAssessment} />
-                      <Button 
-                        onClick={_handleSubmitDailyPlan}
-                        disabled={filteredRuns.length === 0}
-                        className="bg-blue-600 hover:bg-blue-700 "
-                      >
-                        Submit Daily Plan
-                      </Button> 
+                      
                     </>
                   )}
                 </div>
@@ -687,7 +744,7 @@ export default function Dashboard() {
                     return (
                       <Card key={area.id}>
                         <CardHeader>
-                          <CardTitle className="flex items-center">
+                          <CardTitle className="flex items-center ml-3 mt-1">
                             <Mountain className="w-5 h-5 mr-2" />
                             {area.name}
                           </CardTitle>
@@ -732,15 +789,17 @@ export default function Dashboard() {
                                       >
                                         <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-2 gap-2">
                                           <div className="flex items-center space-x-3 flex-1 min-w-0">
-                                            <div className={`w-3 h-3 rounded-full flex-shrink-0 ${
+                                            {/* <div className={`w-3 h-3 rounded-full flex-shrink-0 ${
                                               run.status === "open" 
                                                 ? "bg-green-500" 
                                                 : run.status === "conditional" 
                                                 ? "bg-orange-500" 
                                                 : "bg-red-500"
-                                            }`} />
+                                            }`} /> */}
                                             <div className="min-w-0 flex-1">
-                                              <div className="font-medium truncate">#{run.runNumber} - {run.name}</div>
+                                              <div className="font-medium truncate"><span className="font-light">{`${run.runNumber}   -      `} </span>
+                                                
+                                                 {run.name}</div>
                                               <div className="text-sm text-muted-foreground truncate">
                                                 {run.aspect} • {run.elevationMax}-{run.elevationMin}m
                                               </div>
@@ -799,7 +858,7 @@ export default function Dashboard() {
                                             <Input
                                               data-run-id={run.id}
                                               placeholder="Enter status comment..."
-                                              value={statusCommentInputs[run.id] || run.statusComment || ""}
+                                              value={statusCommentInputs[run.id] !== undefined ? statusCommentInputs[run.id] : (run.statusComment || "")}
                                               onChange={(e) => {
                                                 handleStatusCommentChange(run.id, e.target.value);
                                                 autoSaveComment(run.id); // Trigger auto-save on change
@@ -827,6 +886,28 @@ export default function Dashboard() {
                   })
               )}
             </div>
+            {selectedAreas.size > 0 && (
+            <div className="flex items-cente m-4 space-x-4">
+              <Button 
+                onClick={_handleSubmitDailyPlan}
+                disabled={filteredRuns.length === 0}
+                data-testid="button-submit-daily-plan"
+                size="sm"
+                title={filteredRuns.length === 0 ? "Select runs first" : "Submit daily plan"}
+              >
+                <Plus className="w-4 h-4 mr-2" />
+                Submit Daily Plan
+              </Button>
+              <Button 
+                onClick={triggerPrint}
+                variant="outline"
+                size="sm"
+              >
+                <Printer className="h-4 w-4 mr-2" />
+                Print Plan
+              </Button>
+            </div>
+          )}
             </div>
           </div>
         </div>
@@ -846,21 +927,50 @@ export default function Dashboard() {
           className="flex flex-col min-h-0 flex-1"
           style={{ width: isLargeScreen ? `${100 - leftPanelWidth}%` : '100%' }}
         >
-          {showMap && selectedAreaForMap ? (
+          {showMap ? (
             <>
               {/* Map - Only visible on xl screens and up (1280px+) */}
-              <div className="hidden xl:block h-full w-full flex-1">
-                <NZTopoMap
-                  areaId={selectedAreaForMap}
-                  subAreaId={selectedSubAreaForMap ?? undefined}
-                  selectedRunId={selectedRunId ?? undefined}
-                  hoveredRunId={hoveredRunId ?? undefined}
-                  onClose={() => {
-                    setShowMap(false);
-                    setSelectedAreaForMap(null);
-                    setSelectedSubAreaForMap(null);
-                  }}
-                />
+              <div className="hidden xl:block h-full w-full flex-1 relative">
+                {/* Avalanche Paths Toggle Button */}
+                <div className="absolute top-4 right-4 z-10">
+                  <Button
+                    variant={showAvalanchePaths ? "default" : "outline"}
+                    size="sm"
+                    onClick={() => {
+                      console.log('🔄 Toggling avalanche paths:', !showAvalanchePaths);
+                      setShowAvalanchePaths(!showAvalanchePaths);
+                    }}
+                    className="shadow-lg"
+                  >
+                    <Mountain className="w-4 h-4 mr-2" />
+                    Avalanche Paths
+                  </Button>
+                </div>
+                
+                {selectedAreaForMap ? (
+                  <NZTopoMap
+                    areaId={selectedAreaForMap}
+                    subAreaId={selectedSubAreaForMap ?? undefined}
+                    selectedRunId={selectedRunId ?? undefined}
+                    hoveredRunId={hoveredRunId ?? undefined}
+                    showAvalanchePaths={showAvalanchePaths}
+                    onClose={() => {
+                      setShowMap(false);
+                      setSelectedAreaForMap(null);
+                      setSelectedSubAreaForMap(null);
+                    }}
+                  />
+                ) : (
+                  <div className="h-full w-full flex items-center justify-center bg-muted/20">
+                    <div className="flex flex-col items-center space-y-4 text-center">
+                      <Mountain className="h-12 w-12 text-muted-foreground" />
+                      <div>
+                        <p className="text-lg font-medium">Select an Area</p>
+                        <p className="text-sm text-muted-foreground">Choose an area from the left panel to view the map</p>
+                      </div>
+                    </div>
+                  </div>
+                )}
               </div>
               {/* Run Detail View - Visible on screens below xl (below 1280px) */}
               <div className="xl:hidden h-full w-full overflow-y-auto flex-1">

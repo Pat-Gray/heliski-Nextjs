@@ -138,15 +138,7 @@ export default function DailyPlans() {
       subAreas,
       filteredRuns: selectedRuns,
       selectedAreas: selectedAreasSet,
-      currentDate: selectedDate?.toLocaleDateString('en-US', { 
-        year: 'numeric', 
-        month: 'long', 
-        day: 'numeric' 
-      }) || new Date().toLocaleDateString('en-US', { 
-        year: 'numeric', 
-        month: 'long', 
-        day: 'numeric' 
-      }),
+      currentDate: selectedDate?.toISOString().split('T')[0] || new Date().toISOString().split('T')[0],
       greenCount: getStatusCounts(selectedPlan.runIds).open,
       orangeCount: getStatusCounts(selectedPlan.runIds).conditional,
       redCount: getStatusCounts(selectedPlan.runIds).closed,

@@ -1,16 +1,13 @@
 "use client";
 
 import { usePathname } from "next/navigation";
-import { Mountain, LogOut, User, Shield, Plus, Printer } from "lucide-react";
+import { Mountain, LogOut, User, Shield, RefreshCw, Zap, CheckCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { useAuth } from "@/contexts/auth-context";
 import Navigation from "@/components/navigation";
 import { useState, useEffect } from "react";
-import { usePrint } from "@/components/print-provider";
-import { useQuery } from "@tanstack/react-query";
-import { queryFn } from "@/lib/queryClient";
-import type { Run, Area, SubArea } from "@/lib/schemas/schema";
+import { useToast } from "@/contexts/hooks/use-toast";
 
 import {
   Sidebar,
@@ -28,12 +25,35 @@ interface AppLayoutProps {
   children: React.ReactNode;
 }
 
+interface SetupStatus {
+  isConfigured: boolean;
+  needsSetup: boolean;
+  setupSteps: {
+    environmentVariables: boolean;
+    databaseSchema: boolean;
+    storageBucket: boolean;
+    initialSync: boolean;
+  };
+  mapId?: string;
+  lastSync?: {
+    status: string;
+    started_at: string;
+    completed_at?: string;
+    duration_seconds?: number;
+  };
+}
+
 export function AppLayout({ children }: AppLayoutProps) {
   const pathname = usePathname();
   const { user, signOut, isSuperAdmin } = useAuth();
-  const { setPrintData, triggerPrint } = usePrint();
   const [currentDate, setCurrentDate] = useState<string>('');
-  const [selectedAreas, setSelectedAreas] = useState<Set<string>>(new Set());
+  const [isSyncing, setIsSyncing] = useState(false);
+  const [isTesting, setIsTesting] = useState(false);
+  const [isCreatingBucket, setIsCreatingBucket] = useState(false);
+  const [isIncrementalSyncing, setIsIncrementalSyncing] = useState(false);
+  const [setupStatus, setSetupStatus] = useState<SetupStatus | null>(null);
+  const [isCheckingSetup, setIsCheckingSetup] = useState(true);
+  const { toast } = useToast();
 
   // Set current date on client side to avoid hydration mismatch
   useEffect(() => {
@@ -44,40 +64,38 @@ export function AppLayout({ children }: AppLayoutProps) {
     }));
   }, []);
 
-  // Dashboard data queries
-  const { data: runs = [] } = useQuery<Run[]>({
-    queryKey: ["/api/runs"],
-    queryFn: () => queryFn("/api/runs"),
-    enabled: pathname === "/"
-  });
+  // Check setup status on mount and after operations
+  const checkSetupStatus = async () => {
+    setIsCheckingSetup(true);
+    try {
+      const response = await fetch('/api/caltopo/setup-status');
+      const status = await response.json();
+      setSetupStatus(status);
+    } catch (error) {
+      console.error('Failed to check setup status:', error);
+      setSetupStatus({
+        isConfigured: false,
+        needsSetup: true,
+        setupSteps: {
+          environmentVariables: false,
+          databaseSchema: false,
+          storageBucket: false,
+          initialSync: false
+        }
+      });
+    } finally {
+      setIsCheckingSetup(false);
+    }
+  };
 
-  const { data: areas = [] } = useQuery<Area[]>({
-    queryKey: ["/api/areas"],
-    queryFn: () => queryFn("/api/areas"),
-    enabled: pathname === "/"
-  });
-
-  const { data: subAreas = [] } = useQuery<SubArea[]>({
-    queryKey: ["/api/sub-areas"],
-    queryFn: () => queryFn("/api/sub-areas"),
-    enabled: pathname === "/"
-  });
-
-  // Listen for area selection changes from dashboard
   useEffect(() => {
-    const handleAreaSelection = (event: CustomEvent<Set<string>>) => {
-      setSelectedAreas(event.detail);
-    };
-
-    window.addEventListener('area-selection-changed', handleAreaSelection as EventListener);
-    return () => window.removeEventListener('area-selection-changed', handleAreaSelection as EventListener);
+    checkSetupStatus();
   }, []);
 
   // Determine if this is a page that needs the full layout
   const needsFullLayout = pathname === "/" || pathname === "/run-data" || pathname === "/daily-plans";
 
   if (!needsFullLayout) {
-    // For pages that don't need the sidebar layout, just render children
     return <>{children}</>;
   }
 
@@ -85,39 +103,188 @@ export function AppLayout({ children }: AppLayoutProps) {
     await signOut();
   };
 
-  const handleSubmitDailyPlan = () => {
-    console.log('📋 Submit Daily Plan button clicked in app-layout');
-    console.log('📋 Selected areas:', selectedAreas);
-    console.log('📋 Selected areas size:', selectedAreas.size);
-    const event = new CustomEvent('submit-daily-plan');
-    window.dispatchEvent(event);
-    console.log('📋 Submit Daily Plan event dispatched');
+  const handleTestConnection = async () => {
+    setIsTesting(true);
+    
+    try {
+      console.log('🧪 Testing CalTopo raw data connection...');
+      const testResponse = await fetch('/api/caltopo/test-raw-data', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({})
+      });
+
+      const testResult = await testResponse.json();
+      
+      if (!testResult.success) {
+        toast({
+          title: "Connection Test Failed",
+          description: testResult.error || 'Failed to connect to CalTopo',
+          variant: "destructive"
+        });
+        return;
+      }
+
+      toast({
+        title: "Connection Test Passed",
+        description: `Found ${testResult.data.featuresCount} features and ${testResult.data.groupsCount} groups. Check console for detailed analysis.`,
+      });
+
+      console.log('✅ Test completed successfully:', testResult);
+      await checkSetupStatus(); // Refresh setup status
+    } catch (error) {
+      toast({
+        title: "Test Error",
+        description: error instanceof Error ? error.message : 'Network error',
+        variant: "destructive"
+      });
+    } finally {
+      setIsTesting(false);
+    }
   };
 
-  const handlePrint = () => {
-    if (pathname !== "/") return;
+  const handleCreateBucket = async () => {
+    setIsCreatingBucket(true);
     
-    const greenCount = runs.filter(run => run.status === "open").length;
-    const orangeCount = runs.filter(run => run.status === "conditional").length;
-    const redCount = runs.filter(run => run.status === "closed").length;
-    
-    setPrintData({
-      areas,
-      subAreas,
-      filteredRuns: runs,
-      selectedAreas,
-      currentDate: currentDate || new Date().toLocaleDateString('en-US', { 
-        year: 'numeric', 
-        month: 'long', 
-        day: 'numeric' 
-      }),
-      greenCount,
-      orangeCount,
-      redCount,
-    });
-    setTimeout(() => triggerPrint(), 100);
+    try {
+      const response = await fetch('/api/storage/create-caltopo-bucket', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({})
+      });
+
+      const result = await response.json();
+      
+      if (result.success) {
+        toast({
+          title: "Bucket Created",
+          description: "CalTopo storage bucket created successfully",
+        });
+        await checkSetupStatus(); // Refresh setup status
+      } else {
+        toast({
+          title: "Bucket Creation Failed",
+          description: result.error || 'Failed to create bucket',
+          variant: "destructive"
+        });
+      }
+    } catch (error) {
+      toast({
+        title: "Bucket Error",
+        description: error instanceof Error ? error.message : 'Network error',
+        variant: "destructive"
+      });
+    } finally {
+      setIsCreatingBucket(false);
+    }
   };
 
+  const handleCalTopoSync = async () => {
+    setIsSyncing(true);
+    
+    try {
+      // First test the raw data connection
+      console.log('🧪 Testing CalTopo raw data connection...');
+      const testResponse = await fetch('/api/caltopo/test-raw-data', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({})
+      });
+
+      const testResult = await testResponse.json();
+      
+      if (!testResult.success) {
+        toast({
+          title: "Connection Test Failed",
+          description: testResult.error || 'Failed to connect to CalTopo',
+          variant: "destructive"
+        });
+        setIsSyncing(false);
+        return;
+      }
+
+      toast({
+        title: "Connection Test Passed",
+        description: `Found ${testResult.data.featuresCount} features and ${testResult.data.groupsCount} groups`,
+      });
+
+      // Now try the actual sync
+      const response = await fetch('/api/caltopo/sync-optimized', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ syncType: 'full' })
+      });
+
+      const result = await response.json();
+
+      if (result.success) {
+        toast({
+          title: "Full Sync Completed",
+          description: `Synced ${result.stats.features.total} features, ${result.stats.images.total} images, and ${result.stats.folders.total} folders.`,
+        });
+        await checkSetupStatus(); // Refresh setup status
+      } else {
+        toast({
+          title: "Sync Failed",
+          description: result.error || 'Unknown error occurred',
+          variant: "destructive"
+        });
+      }
+    } catch (error) {
+      toast({
+        title: "Sync Error",
+        description: error instanceof Error ? error.message : 'Network error',
+        variant: "destructive"
+      });
+    } finally {
+      setIsSyncing(false);
+    }
+  };
+
+  const handleIncrementalSync = async () => {
+    setIsIncrementalSyncing(true);
+    
+    try {
+      console.log('⚡ Starting incremental sync...');
+      const response = await fetch('/api/caltopo/sync-incremental', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ syncType: 'incremental' })
+      });
+
+      const result = await response.json();
+
+      if (result.success) {
+        const efficiency = result.stats.efficiency;
+        toast({
+          title: "Incremental Sync Completed",
+          description: `Efficient sync: ${efficiency.featuresEfficiency} features, ${efficiency.imagesEfficiency} images, ${efficiency.foldersEfficiency} folders unchanged.`,
+        });
+        
+        console.log('⚡ Incremental sync stats:', result.stats);
+        await checkSetupStatus(); // Refresh setup status
+      } else {
+        toast({
+          title: "Incremental Sync Failed",
+          description: result.error || 'Unknown error occurred',
+          variant: "destructive"
+        });
+      }
+    } catch (error) {
+      toast({
+        title: "Incremental Sync Error",
+        description: error instanceof Error ? error.message : 'Network error',
+        variant: "destructive"
+      });
+    } finally {
+      setIsIncrementalSyncing(false);
+    }
+  };
+
+  // Determine which buttons to show
+  const showSetupButtons = setupStatus?.needsSetup || false;
+  const showIncrementalButton = setupStatus?.isConfigured || false;
+  
   return (
     <SidebarProvider>
       <Sidebar variant="inset" collapsible="icon">
@@ -203,11 +370,8 @@ export function AppLayout({ children }: AppLayoutProps) {
           </div>
         </div>
         
-       
       </Sidebar>
       
-  
-
       <SidebarInset className="h-screen flex flex-col">
         <header className="flex h-16 shrink-0 items-center gap-2 border-b px-4">
           <SidebarTrigger className="-ml-1" />
@@ -219,7 +383,6 @@ export function AppLayout({ children }: AppLayoutProps) {
                  pathname === "/daily-plans" ? "Daily Plans" :
                  pathname === "/admin/users" ? "User Management" :
                  "Heli-Ski Operations"
-                 
                  }
               </h1>
               {pathname === "/" && (
@@ -230,29 +393,111 @@ export function AppLayout({ children }: AppLayoutProps) {
             </div>
           </div>
           
-          {/* Dashboard Action Buttons */}
-          {pathname === "/" && (
-            <div className="flex items-center space-x-2">
-              <Button 
-                onClick={handleSubmitDailyPlan}
-                disabled={selectedAreas.size === 0}
-                data-testid="button-submit-daily-plan"
-                size="sm"
-                title={selectedAreas.size === 0 ? "Select areas first" : "Submit daily plan"}
-              >
-                <Plus className="w-4 h-4 mr-2" />
-                Submit Daily Plan
-              </Button>
-              <Button 
-                onClick={handlePrint}
-                variant="outline"
-                size="sm"
-              >
-                <Printer className="h-4 w-4 mr-2" />
-                Print Plan
-              </Button>
-            </div>
-          )}
+          {/* CalTopo Buttons - Smart Display */}
+          <div className="flex items-center space-x-2">
+            {isCheckingSetup ? (
+              <div className="flex items-center space-x-2 text-sm text-muted-foreground">
+                <RefreshCw className="w-4 h-4 animate-spin" />
+                <span>Checking setup...</span>
+              </div>
+            ) : showSetupButtons ? (
+              // Setup Phase Buttons
+              <>
+                <Button
+                  onClick={handleTestConnection}
+                  disabled={isTesting || isSyncing || isCreatingBucket}
+                  variant="outline"
+                  size="sm"
+                  className="flex items-center gap-2"
+                >
+                  <RefreshCw className={`w-4 h-4 ${isTesting ? 'animate-spin' : ''}`} />
+                  {isTesting ? 'Testing...' : 'Test'}
+                </Button>
+                <Button
+                  onClick={handleCreateBucket}
+                  disabled={isCreatingBucket || isSyncing || isTesting}
+                  variant="outline"
+                  size="sm"
+                  className="flex items-center gap-2"
+                >
+                  <RefreshCw className={`w-4 h-4 ${isCreatingBucket ? 'animate-spin' : ''}`} />
+                  {isCreatingBucket ? 'Creating...' : 'Bucket'}
+                </Button>
+                <Button
+                  onClick={handleCalTopoSync}
+                  disabled={isSyncing || isTesting || isCreatingBucket}
+                  variant="default"
+                  size="sm"
+                  className="flex items-center gap-2"
+                >
+                  <RefreshCw className={`w-4 h-4 ${isSyncing ? 'animate-spin' : ''}`} />
+                  {isSyncing ? 'Full Sync...' : 'Full Sync'}
+                </Button>
+              </>
+            ) : showIncrementalButton ? (
+              // Production Phase - Only Incremental Button
+              <>
+                <div className="flex items-center space-x-2 text-sm text-muted-foreground mr-2">
+                  <CheckCircle className="w-4 h-4 text-green-500" />
+                  <span>Ready</span>
+                </div>
+                <Button
+                  onClick={handleIncrementalSync}
+                  disabled={isIncrementalSyncing}
+                  variant="default"
+                  size="sm"
+                  className="flex items-center gap-2"
+                >
+                  <Zap className={`w-4 h-4 ${isIncrementalSyncing ? 'animate-pulse' : ''}`} />
+                  {isIncrementalSyncing ? 'Syncing...' : 'Sync'}
+                </Button>
+              </>
+            ) : (
+              // Fallback - Show all buttons
+              <>
+                <Button
+                  onClick={handleTestConnection}
+                  disabled={isTesting || isSyncing || isCreatingBucket || isIncrementalSyncing}
+                  variant="outline"
+                  size="sm"
+                  className="flex items-center gap-2"
+                >
+                  <RefreshCw className={`w-4 h-4 ${isTesting ? 'animate-spin' : ''}`} />
+                  {isTesting ? 'Testing...' : 'Test'}
+                </Button>
+                <Button
+                  onClick={handleCreateBucket}
+                  disabled={isCreatingBucket || isSyncing || isTesting || isIncrementalSyncing}
+                  variant="outline"
+                  size="sm"
+                  className="flex items-center gap-2"
+                >
+                  <RefreshCw className={`w-4 h-4 ${isCreatingBucket ? 'animate-spin' : ''}`} />
+                  {isCreatingBucket ? 'Creating...' : 'Bucket'}
+                </Button>
+                <Button
+                  onClick={handleCalTopoSync}
+                  disabled={isSyncing || isTesting || isCreatingBucket || isIncrementalSyncing}
+                  variant="outline"
+                  size="sm"
+                  className="flex items-center gap-2"
+                >
+                  <RefreshCw className={`w-4 h-4 ${isSyncing ? 'animate-spin' : ''}`} />
+                  {isSyncing ? 'Full Sync...' : 'Full Sync'}
+                </Button>
+                <Button
+                  onClick={handleIncrementalSync}
+                  disabled={isIncrementalSyncing || isSyncing || isTesting || isCreatingBucket}
+                  variant="default"
+                  size="sm"
+                  className="flex items-center gap-2"
+                >
+                  <Zap className={`w-4 h-4 ${isIncrementalSyncing ? 'animate-pulse' : ''}`} />
+                  {isIncrementalSyncing ? 'Incremental...' : 'Incremental'}
+                </Button>
+              </>
+            )}
+          </div>
         </header>
         <div className="flex-1 overflow-hidden">
           {children}
