@@ -37,7 +37,7 @@ export default function RunDetailSideModal({
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="max-w-7xl max-h-[90vh] w-full h-full p-1 overflow-hidden mx-4 sm:mx-0">
+      <DialogContent className="max-w-7xl max-h-[90vh] w-full p-1 overflow-hidden mx-4 sm:mx-0">
         <DialogTitle className="sr-only">Run Details</DialogTitle>
         <RunDetailView 
           runId={runId} 

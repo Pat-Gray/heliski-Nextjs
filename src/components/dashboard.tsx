@@ -44,6 +44,7 @@ export default function Dashboard() {
   const [selectedAreaForMap, setSelectedAreaForMap] = useState<string | null>(null);
   const [selectedSubAreaForMap, setSelectedSubAreaForMap] = useState<string | null>(null);
   const [showAvalanchePaths, setShowAvalanchePaths] = useState(false);
+  const [showOperations, setShowOperations] = useState(false);
   const [statusCommentInputs, setStatusCommentInputs] = useState<Record<string, string>>({});
   const updateTimeoutsRef = useRef<Record<string, NodeJS.Timeout>>({});
   const [hoveredRunId, setHoveredRunId] = useState<string | null>(null);
@@ -346,20 +347,55 @@ export default function Dashboard() {
           }
           
           // Get current CalTopo comments
-          let currentCalTopoComments = run.runNotes || '';
+          const currentCalTopoComments = run.runNotes || '';
+          
+          // Debug: Log original comments for troubleshooting
+          if (currentCalTopoComments.includes('--- Status Updated:')) {
+            console.log(`🔍 Cleaning comments for run ${run.name}:`, {
+              original: currentCalTopoComments.slice(0, 200) + '...',
+              hasStatusBlocks: currentCalTopoComments.includes('--- Status Updated:')
+            });
+          }
           
           // Clean existing status comments - comprehensive approach
           let cleanedNotes = currentCalTopoComments;
           
-          // Remove all status comment blocks completely
-          // This regex matches from "--- Status Updated:" to the end of the string
+          // Remove ALL status comment blocks completely using multiple approaches
+          // First, remove blocks that end with "---"
+          const beforeFirst = cleanedNotes;
+          cleanedNotes = cleanedNotes.replace(/--- Status Updated:[\s\S]*?---/g, '');
+          if (beforeFirst !== cleanedNotes) {
+            console.log(`✅ Removed status blocks ending with --- for ${run.name}`);
+          }
+          
+          // Then, remove blocks that go to the end of the string
+          const beforeSecond = cleanedNotes;
           cleanedNotes = cleanedNotes.replace(/--- Status Updated:[\s\S]*$/g, '');
+          if (beforeSecond !== cleanedNotes) {
+            console.log(`✅ Removed status blocks to end of string for ${run.name}`);
+          }
+          
+          // Also handle cases where there might be multiple consecutive status blocks
+          const beforeThird = cleanedNotes;
+          cleanedNotes = cleanedNotes.replace(/(--- Status Updated:[\s\S]*?---\s*)+/g, '');
+          if (beforeThird !== cleanedNotes) {
+            console.log(`✅ Removed consecutive status blocks for ${run.name}`);
+          }
           
           // Clean up any remaining whitespace and newlines
           cleanedNotes = cleanedNotes
             .replace(/^\s*\n+|\n+\s*$/g, '')
             .replace(/\n{3,}/g, '\n\n')
             .trim();
+          
+          // Debug: Log final result
+          if (currentCalTopoComments !== cleanedNotes) {
+            console.log(`🧹 Final cleaned comments for ${run.name}:`, {
+              original: currentCalTopoComments.slice(0, 100) + '...',
+              cleaned: cleanedNotes.slice(0, 100) + '...',
+              removed: currentCalTopoComments.length - cleanedNotes.length + ' characters'
+            });
+          }
           
           const updatedNotes = `${statusCommentHeader}\n\n${cleanedNotes}`;
           
@@ -931,8 +967,8 @@ export default function Dashboard() {
             <>
               {/* Map - Only visible on xl screens and up (1280px+) */}
               <div className="hidden xl:block h-full w-full flex-1 relative">
-                {/* Avalanche Paths Toggle Button */}
-                <div className="absolute top-4 right-4 z-10">
+                {/* Map Toggle Buttons */}
+                <div className="absolute top-4 right-4 z-10 flex gap-2">
                   <Button
                     variant={showAvalanchePaths ? "default" : "outline"}
                     size="sm"
@@ -945,6 +981,18 @@ export default function Dashboard() {
                     <Mountain className="w-4 h-4 mr-2" />
                     Avalanche Paths
                   </Button>
+                  <Button
+                    variant={showOperations ? "default" : "outline"}
+                    size="sm"
+                    onClick={() => {
+                      console.log('🔄 Toggling operations:', !showOperations);
+                      setShowOperations(!showOperations);
+                    }}
+                    className="shadow-lg"
+                  >
+                    <MapPin className="w-4 h-4 mr-2" />
+                    Operations
+                  </Button>
                 </div>
                 
                 {selectedAreaForMap ? (
@@ -954,6 +1002,7 @@ export default function Dashboard() {
                     selectedRunId={selectedRunId ?? undefined}
                     hoveredRunId={hoveredRunId ?? undefined}
                     showAvalanchePaths={showAvalanchePaths}
+                    showOperations={showOperations}
                     onClose={() => {
                       setShowMap(false);
                       setSelectedAreaForMap(null);

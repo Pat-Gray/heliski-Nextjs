@@ -55,6 +55,9 @@ interface NZTopoMapProps {
   hoveredFeatureId?: string | null;
   onFeatureSelect?: (featureId: string | null) => void;
   onFeatureHover?: (featureId: string | null) => void;
+  // New props for operations features
+  showOperations?: boolean;
+  operationsFeatures?: AvalancheFeature[];
 }
 
 interface RunData {
@@ -162,6 +165,8 @@ export default function NZTopoMap({
   hoveredFeatureId: _hoveredFeatureId,
   onFeatureSelect: _onFeatureSelect,
   onFeatureHover: _onFeatureHover,
+  showOperations = false,
+  operationsFeatures: propOperationsFeatures = [],
 }: NZTopoMapProps) {
   const mapRef = useRef<MapRef>(null);
   const gpxCache = useRef<Record<string, FeatureCollection<LineString>>>({});
@@ -186,6 +191,11 @@ export default function NZTopoMap({
   const [_avalancheError, setAvalancheError] = useState<string | null>(null);
   const [selectedAvalancheFeature, setSelectedAvalancheFeature] = useState<AvalancheFeature | null>(null);
   const [isAvalancheModalOpen, setIsAvalancheModalOpen] = useState(false);
+  
+  // Operations state
+  const [operationsFeatures, setOperationsFeatures] = useState<AvalancheFeature[]>(propOperationsFeatures);
+  const [_operationsLoading, setOperationsLoading] = useState(false);
+  const [_operationsError, setOperationsError] = useState<string | null>(null);
 
   // Fetch ALL runs for the area (not filtered by subAreaId) - skip for avalanche paths
   const { data: runsData, isLoading, error: fetchError } = useRunsForArea(
@@ -257,6 +267,72 @@ export default function NZTopoMap({
       setAvalancheFeatures([]);
     }
   }, [showAvalanchePaths, avalancheFeatures.length]);
+
+  // Fetch operations features when showOperations is true
+  useEffect(() => {
+    if (showOperations && operationsFeatures.length === 0) {
+      console.log('🔄 Fetching operations features from database...');
+      setOperationsLoading(true);
+      setOperationsError(null);
+      
+      // First get available maps, then try to find operations features
+      const fetchOperationsFeatures = async () => {
+        try {
+          // Get available maps first
+          const mapsResponse = await fetch('/api/caltopo/data/maps');
+          const mapsData = await mapsResponse.json();
+          
+          if (!mapsData.maps || mapsData.maps.length === 0) {
+            throw new Error('No CalTopo maps found in database. Please run sync first.');
+          }
+          
+          console.log('📡 Available maps:', mapsData.maps);
+          
+          // Try each map to find operations features
+          let operationsFeaturesFound = [];
+          let lastError = null;
+          
+          for (const map of mapsData.maps) {
+            try {
+              console.log(`🔍 Checking map ${map.id} for operations features...`);
+              const response = await fetch(`/api/caltopo/data/operations-features?mapId=${map.id}`);
+              const data = await response.json();
+              
+              if (data.success && data.operationsFeatures && data.operationsFeatures.length > 0) {
+                console.log(`✅ Found ${data.operationsFeatures.length} operations features in map ${map.id}`);
+                operationsFeaturesFound = data.operationsFeatures;
+                break; // Found features, stop searching
+              } else {
+                console.log(`ℹ️ No operations features found in map ${map.id}`);
+              }
+            } catch (error) {
+              console.log(`⚠️ Error checking map ${map.id}:`, error);
+              lastError = error;
+            }
+          }
+          
+          if (operationsFeaturesFound.length > 0) {
+            console.log('✅ Setting operations features:', operationsFeaturesFound);
+            setOperationsFeatures(operationsFeaturesFound);
+          } else {
+            const errorMsg = lastError ? (lastError instanceof Error ? lastError.message : String(lastError)) : 'No operations features found in any synced maps';
+            console.error('❌ No operations features found:', errorMsg);
+            setOperationsError(errorMsg);
+          }
+        } catch (error) {
+          console.error('❌ Error fetching operations features:', error);
+          setOperationsError(error instanceof Error ? error.message : 'Unknown error');
+        } finally {
+          setOperationsLoading(false);
+        }
+      };
+      
+      fetchOperationsFeatures();
+    } else if (!showOperations) {
+      console.log('🔄 Clearing operations features');
+      setOperationsFeatures([]);
+    }
+  }, [showOperations, operationsFeatures.length]);
 
   // Process runs data with GPX caching and memoization
   useEffect(() => {
@@ -452,6 +528,101 @@ export default function NZTopoMap({
     console.log('✅ Generated avalanche GeoJSON:', result);
     return result;
   }, [avalancheFeatures]);
+
+  // Convert operations features to GeoJSON for rendering
+  const operationsGeoJSON = React.useMemo(() => {
+    console.log('🔄 Converting operations features to GeoJSON:', operationsFeatures);
+    if (!operationsFeatures || operationsFeatures.length === 0) {
+      console.log('❌ No operations features to convert');
+      return null;
+    }
+
+    const features = operationsFeatures.map(feature => {
+      console.log(`🗺️ Converting operations feature to GeoJSON:`, {
+        id: feature.id,
+        title: feature.title,
+        geometryType: feature.geometryType,
+        hasImages: feature.hasImages,
+        imageCount: feature.images?.length || 0
+      });
+      
+      // Parse coordinates if they're stored as string
+      let coords = feature.coordinates;
+      if (typeof coords === 'string') {
+        try {
+          coords = JSON.parse(coords);
+        } catch {
+          console.warn('⚠️ Failed to parse coordinates:', coords);
+          return null;
+        }
+      }
+      
+      if (feature.geometryType === 'LineString' && coords && Array.isArray(coords) && coords.length > 0) {
+        const geoFeature = {
+          type: 'Feature' as const,
+          id: feature.id,
+          properties: {
+            ...feature.properties,
+            id: feature.id,
+            title: feature.title,
+            hasImages: feature.hasImages,
+            class: feature.class
+          },
+          geometry: {
+            type: 'LineString' as const,
+            coordinates: coords as [number, number][]
+          }
+        };
+        console.log(`🗺️ Created operations LineString feature:`, geoFeature);
+        return geoFeature;
+      } else if (feature.geometryType === 'Point' && coords && Array.isArray(coords) && coords.length >= 2) {
+        const geoFeature = {
+          type: 'Feature' as const,
+          id: feature.id,
+          properties: {
+            ...feature.properties,
+            id: feature.id,
+            title: feature.title,
+            hasImages: feature.hasImages,
+            class: feature.class
+          },
+          geometry: {
+            type: 'Point' as const,
+            coordinates: [coords[0] as unknown as number, coords[1] as unknown as number] as [number, number]
+          }
+        };
+        console.log(`🗺️ Created operations Point feature:`, geoFeature);
+        return geoFeature;
+      } else if (feature.geometryType === 'Polygon' && coords && Array.isArray(coords) && coords.length > 0) {
+        const geoFeature = {
+          type: 'Feature' as const,
+          id: feature.id,
+          properties: {
+            ...feature.properties,
+            id: feature.id,
+            title: feature.title,
+            hasImages: feature.hasImages,
+            class: feature.class
+          },
+          geometry: {
+            type: 'Polygon' as const,
+            coordinates: coords as unknown as [number, number][][]
+          }
+        };
+        console.log(`🗺️ Created operations Polygon feature:`, geoFeature);
+        return geoFeature;
+      }
+      console.log(`🗺️ Skipping operations feature (no valid geometry):`, feature);
+      return null;
+    }).filter((feature): feature is NonNullable<typeof feature> => feature !== null);
+
+    const result = {
+      type: 'FeatureCollection' as const,
+      features
+    };
+    console.log('✅ Generated operations GeoJSON:', result);
+    return result;
+  }, [operationsFeatures]);
 
   // Handle clicks on avalanche features
   const handleAvalancheFeatureClick = useCallback((event: MapMouseEvent) => {
@@ -987,6 +1158,94 @@ export default function NZTopoMap({
               {/* Feature labels */}
               <Layer
                 id="avalanche-labels"
+                type="symbol"
+                layout={{
+                  'text-field': ['get', 'title'],
+                  'text-font': ['Open Sans Bold', 'Arial Unicode MS Bold'],
+                  'text-size': 12,
+                  'text-anchor': 'top',
+                  'text-offset': [0, 1]
+                }}
+                paint={{
+                  'text-color': '#ffffff',
+                  'text-halo-color': '#000000',
+                  'text-halo-width': 2
+                }}
+              />
+            </Source>
+          )}
+
+          {/* Operations Features */}
+          {showOperations && operationsGeoJSON && (() => {
+            console.log('🗺️ Rendering operations features on map:', operationsGeoJSON);
+            console.log('🗺️ Operations feature count:', operationsGeoJSON.features.length);
+            return true;
+          })() && (
+            <Source 
+              id="operations-features-source" 
+              type="geojson" 
+              data={operationsGeoJSON}
+            >
+              {/* LineString features (paths) */}
+              <Layer
+                id="operations-lines"
+                type="line"
+                filter={['==', ['geometry-type'], 'LineString']}
+                paint={{
+                  'line-color': '#3b82f6',
+                  'line-width': 3,
+                  'line-opacity': 0.8
+                }}
+                layout={{
+                  'line-cap': 'round',
+                  'line-join': 'round'
+                }}
+              />
+              
+              {/* Point features (markers) */}
+              <Layer
+                id="operations-points"
+                type="circle"
+                filter={['==', ['geometry-type'], 'Point']}
+                paint={{
+                  'circle-color': '#3b82f6',
+                  'circle-radius': 6,
+                  'circle-opacity': 0.8,
+                  'circle-stroke-color': '#ffffff',
+                  'circle-stroke-width': 2
+                }}
+              />
+              
+              {/* Polygon features (areas) */}
+              <Layer
+                id="operations-polygons"
+                type="fill"
+                filter={['==', ['geometry-type'], 'Polygon']}
+                paint={{
+                  'fill-color': '#3b82f6',
+                  'fill-opacity': 0.3
+                }}
+              />
+              
+              {/* Polygon outlines */}
+              <Layer
+                id="operations-polygon-outlines"
+                type="line"
+                filter={['==', ['geometry-type'], 'Polygon']}
+                paint={{
+                  'line-color': '#3b82f6',
+                  'line-width': 2,
+                  'line-opacity': 0.8
+                }}
+                layout={{
+                  'line-cap': 'round',
+                  'line-join': 'round'
+                }}
+              />
+              
+              {/* Feature labels */}
+              <Layer
+                id="operations-labels"
                 type="symbol"
                 layout={{
                   'text-field': ['get', 'title'],
