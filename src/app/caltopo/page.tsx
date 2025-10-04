@@ -104,7 +104,7 @@ export default function Home() {
         throw new Error(data.error || 'Failed to fetch maps.');
       }
 
-      console.log('✅ Frontend: Successfully fetched maps', { mapsCount: data.maps.length });
+      // Maps fetched successfully
       setMaps(data.maps);
       
       // Update debug info
@@ -187,7 +187,7 @@ export default function Home() {
         throw new Error(data.error || 'Failed to fetch tracks.');
       }
 
-      console.log('✅ Frontend: Successfully fetched tracks', { tracksCount: data.gpxTracks.length });
+      // Tracks fetched successfully
       setGpxTracks(data.gpxTracks);
       
       // Update debug info

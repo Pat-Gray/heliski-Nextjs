@@ -7,16 +7,30 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
-import { Mountain,CheckCircle, MapPin, GripVertical, Plus, Printer } from "lucide-react";
+import { Mountain,CheckCircle, MapPin, GripVertical, Plus, Printer, Loader2 } from "lucide-react";
 import { useToast } from "@/contexts/hooks/use-toast";
 import { apiRequest, queryFn } from "@/lib/queryClient";
 import RunDetailView from "@/components/run-detail-view";
 import RunDetailSideModal from "@/components/modals/run-detail-side-modal";
-import NZTopoMap from "@/components/maps/nz-topo-map";
+import dynamic from "next/dynamic";
+
+const NZTopoMap = dynamic(() => import("@/components/maps/nz-topo-map"), {
+  ssr: false,
+  loading: () => (
+    <div className="flex items-center justify-center h-full bg-muted/20">
+      <div className="flex flex-col items-center space-y-4 text-center">
+        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+        <div>
+          <p className="text-sm font-medium">Loading map...</p>
+          <p className="text-xs text-muted-foreground">Initializing map component</p>
+        </div>
+      </div>
+    </div>
+  )
+});
 import DashboardFilters from "@/components/dashboard-filters";
 import { usePrint } from "@/components/print-provider";
 import type { Run, InsertDailyPlan, Area, SubArea } from "@/lib/schemas/schema";
-import { Loader2 } from "lucide-react";
 
 export default function Dashboard() {
   const [selectedRunId] = useState<string | null>(null);
@@ -282,7 +296,7 @@ export default function Dashboard() {
     const comment = statusCommentInputs[runId] || '';
     console.log('Saving comment for run:', runId, 'comment:', comment);
     // Always save the comment, even if empty (to clear it)
-    updateRunStatusMutation.mutate({ runId, status: 'conditional', statusComment: comment });
+      updateRunStatusMutation.mutate({ runId, status: 'conditional', statusComment: comment });
   };
 
   // Auto-save comment with debouncing - completely seamless
@@ -295,13 +309,13 @@ export default function Dashboard() {
     // Set a new timeout for auto-save
     updateTimeoutsRef.current[runId] = setTimeout(() => {
       const comment = statusCommentInputs[runId] || '';
-      console.log('Auto-saving comment for run:', runId, 'comment:', comment);
+        console.log('Auto-saving comment for run:', runId, 'comment:', comment);
       // Save seamlessly without any visual indicators (including empty comments)
-      updateRunStatusMutation.mutate({ 
-        runId, 
-        status: 'conditional', 
-        statusComment: comment 
-      });
+        updateRunStatusMutation.mutate({ 
+          runId, 
+          status: 'conditional', 
+          statusComment: comment 
+        });
     }, 300); // Very fast auto-save for seamless experience
   };
   // Sync CalTopo styles function
@@ -392,17 +406,13 @@ export default function Dashboard() {
         subAreas,
         filteredRuns,
         selectedAreas,
-        currentDate: currentDate || new Date().toLocaleDateString('en-US', { 
-          year: 'numeric', 
-          month: 'long', 
-          day: 'numeric' 
-        }),
+        currentDate: currentDate || new Date().toISOString().split('T')[0],
         greenCount,
         orangeCount,
         redCount,
       };
       
-      console.log('🖨️ Setting print data:', printData);
+      // Setting print data for daily plan
       setPrintData(printData);
       
       // // Single print attempt with proper timing
@@ -432,11 +442,7 @@ export default function Dashboard() {
 
   // Set current date on client side to avoid hydration mismatch
   useEffect(() => {
-    setCurrentDate(new Date().toLocaleDateString('en-US', { 
-      year: 'numeric', 
-      month: 'long', 
-      day: 'numeric' 
-    }));
+    setCurrentDate(new Date().toISOString().split('T')[0]);
   }, []);
 
   // Handle screen size changes
@@ -535,11 +541,7 @@ export default function Dashboard() {
       return summary;
     }).join('\n');
     
-    const planNotes = `Daily Plan Summary - ${currentDate || new Date().toLocaleDateString('en-US', { 
-      year: 'numeric', 
-      month: 'long', 
-      day: 'numeric' 
-    })}\n\nRun Status:\n${statusSummary}`;
+    const planNotes = `Daily Plan Summary - ${currentDate || new Date().toISOString().split('T')[0]}\n\nRun Status:\n${statusSummary}`;
     
     // Normalize date to avoid timezone issues
     const normalizedDate = new Date();
@@ -548,37 +550,17 @@ export default function Dashboard() {
     // Update CalTopo comments for ALL runs with CalTopo integration (regardless of status comment)
     const runsToSync = filteredRuns.filter(run => run.caltopoMapId && run.caltopoFeatureId);
     
-    console.log('🔄 Daily Plan Status Comment Sync:', {
-      totalRuns: filteredRuns.length,
-      runsWithStatusComments: filteredRuns.filter(run => run.statusComment).length,
-      runsWithCalTopo: filteredRuns.filter(run => run.caltopoMapId && run.caltopoFeatureId).length,
-      runsToSync: runsToSync.length,
-      runsToSyncDetails: runsToSync.map(run => ({
-        name: run.name,
-        status: run.status,
-        statusComment: run.statusComment || 'none',
-        caltopoMapId: run.caltopoMapId,
-        caltopoFeatureId: run.caltopoFeatureId
-      }))
-    });
+    // Daily Plan Status Comment Sync - optimized with map data caching
+    
+    // Fetch CalTopo map data once for all runs to avoid duplicate API calls
+    const mapDataCache = new Map<string, { features?: Array<{ id: string; properties?: { description?: string } }> }>();
     
     const caltopoSyncPromises = runsToSync.map(async (run) => {
         try {
-          const currentDate = new Date().toLocaleDateString('en-US', {
-            year: 'numeric',
-            month: 'short',
-            day: 'numeric'
-          });
+          const currentDate = new Date().toISOString().split('T')[0];
           
           // Format status comment based on run status
           let statusCommentHeader;
-          console.log(`📊 Run status for ${run.name}:`, {
-            status: run.status,
-            statusComment: run.statusComment,
-            hasComment: !!run.statusComment,
-            isConditional: run.status === 'conditional',
-            willIncludeComment: run.status === 'conditional' && run.statusComment && run.statusComment.trim()
-          });
           
           // All status types use the same format: --- Status Updated: date ---
           // Only include status comment for conditional runs
@@ -590,18 +572,26 @@ export default function Dashboard() {
             statusCommentHeader = `--- Status Updated: ${currentDate} ---`;
           }
           
-          // Get current CalTopo comments directly from CalTopo API
-          // This ensures we're working with the actual CalTopo data, not mixed web app data
+          // Get current CalTopo comments from cached map data or fetch if not cached
           let currentCalTopoComments = '';
           try {
-            const caltopoResponse = await fetch('/api/caltopo/fetch-map', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ mapId: run.caltopoMapId })
-            });
+            let caltopoData = mapDataCache.get(run.caltopoMapId!);
             
-            if (caltopoResponse.ok) {
-              const caltopoData = await caltopoResponse.json();
+            if (!caltopoData) {
+              const caltopoResponse = await fetch('/api/caltopo/fetch-map', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ mapId: run.caltopoMapId! })
+              });
+              
+              if (caltopoResponse.ok) {
+                const responseData = await caltopoResponse.json();
+                caltopoData = responseData;
+                mapDataCache.set(run.caltopoMapId!, responseData);
+              }
+            }
+            
+            if (caltopoData) {
               const feature = caltopoData.features?.find((f: { id: string }) => f.id === run.caltopoFeatureId);
               currentCalTopoComments = feature?.properties?.description || '';
             }
@@ -679,14 +669,11 @@ export default function Dashboard() {
           });
           
           if (syncResponse.ok) {
-            console.log(`✅ Successfully synced status comment for run: ${run.name}`);
+            // Status comment synced successfully
             
             // Also update the local database with the new CalTopo content
             try {
-              console.log(`💾 Updating local database for run: ${run.name}`, {
-                runId: run.id,
-                updatedNotes: updatedNotes.slice(0, 200) + '...'
-              });
+              // Updating local database with CalTopo content
               
               const dbUpdateResponse = await fetch(`/api/runs/${run.id}`, {
                 method: 'PATCH',
@@ -695,10 +682,10 @@ export default function Dashboard() {
               });
               
               if (dbUpdateResponse.ok) {
-                console.log(`✅ Successfully updated local database for run: ${run.name}`);
+                // Local database updated successfully
                 // Invalidate the runs query to refresh the run detail view
                 queryClient.invalidateQueries({ queryKey: ['/api/runs'] });
-                console.log(`🔄 Invalidated runs query cache for run: ${run.name}`);
+                // Query cache invalidated
               } else {
                 const errorData = await dbUpdateResponse.json();
                 console.error(`❌ Failed to update local database for run: ${run.name}`, errorData);

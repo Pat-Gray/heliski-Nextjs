@@ -67,7 +67,7 @@ export default function RunFormModal({ preselectedSubAreaId }: RunFormModalProps
   const queryClient = useQueryClient();
 
   // Generate a temporary ID for file uploads
-  const [tempRunId] = useState(() => `temp-${Date.now()}`);
+  const [tempRunId] = useState(() => `temp-${Math.floor(123456)}`);
 
   // Fetch available CalTopo maps
   const { data: caltopoMaps = [], isLoading: mapsLoading, error: mapsError } = useQuery<CalTopoMap[]>({

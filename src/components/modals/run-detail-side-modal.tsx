@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect } from 'react';
-import { Dialog, DialogContent } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import RunDetailView from "../run-detail-view";
 
 interface RunDetailSideModalProps {
@@ -38,14 +38,11 @@ export default function RunDetailSideModal({
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
       <DialogContent className="max-w-7xl max-h-[90vh] w-full h-full p-1 overflow-hidden mx-4 sm:mx-0">
-        
-          
-            <RunDetailView 
-              runId={runId} 
-              focusStatusComment={focusStatusComment}
-            />
-          
-        
+        <DialogTitle className="sr-only">Run Details</DialogTitle>
+        <RunDetailView 
+          runId={runId} 
+          focusStatusComment={focusStatusComment}
+        />
       </DialogContent>
 
     </Dialog>

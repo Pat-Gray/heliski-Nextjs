@@ -5,7 +5,7 @@ import { useRunsForArea } from '@/contexts/hooks/use-runs-for-area';
 import { parseGPXToGeoJSON } from '@/utils/gpx-parser';
 import { Loader2, MapPin, AlertTriangle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import type { Run } from '@/lib/schemas/schema';
+
 
 interface NZTopoMapProps {
   areaId: string;
@@ -21,6 +21,7 @@ interface RunData {
   runNumber: number;
   status: 'open' | 'conditional' | 'closed';
   gpxPath: string;
+  subAreaId: string;
   gpxData?: FeatureCollection<LineString>;
 }
 
@@ -71,6 +72,42 @@ function calculateGPXBounds(runs: RunData[]) {
   };
 }
 
+// Calculate bounds for a specific sub-area
+function calculateSubAreaBounds(runs: RunData[], targetSubAreaId: string) {
+  let minLat = Infinity;
+  let maxLat = -Infinity;
+  let minLon = Infinity;
+  let maxLon = -Infinity;
+  let hasData = false;
+
+  runs.forEach(run => {
+    if (run.subAreaId === targetSubAreaId && run.gpxData && run.gpxData.features) {
+      run.gpxData.features.forEach(feature => {
+        if (feature.geometry.type === 'LineString') {
+          const coordinates = feature.geometry.coordinates as number[][];
+          coordinates.forEach(coord => {
+            const [lon, lat] = coord;
+            minLat = Math.min(minLat, lat);
+            maxLat = Math.max(maxLat, lat);
+            minLon = Math.min(minLon, lon);
+            maxLon = Math.max(maxLon, lon);
+            hasData = true;
+          });
+        }
+      });
+    }
+  });
+
+  if (!hasData) return null;
+
+  return {
+    minLat,
+    maxLat,
+    minLon,
+    maxLon
+  };
+}
+
 export default function NZTopoMap({ 
   areaId, 
   subAreaId, 
@@ -79,11 +116,10 @@ export default function NZTopoMap({
   onClose,
 }: NZTopoMapProps) {
   const mapRef = useRef<MapRef>(null);
-  const prevRunsDataRef = useRef<Run[]>([]);
   const [viewState, setViewState] = useState({
     longitude: 174.0,
     latitude: -41.0,
-    zoom: 11,
+    zoom: 8, // Start with a wider view
     bearing: 0,
     pitch: 0
   });
@@ -94,55 +130,15 @@ export default function NZTopoMap({
   const [mapError, setMapError] = useState<string | null>(null);
   const [useNZTopo, setUseNZTopo] = useState(true);
   const [, setTileLoadError] = useState<string | null>(null);
-  const [hasZoomed, setHasZoomed] = useState(false);
+  const [hasInitialized, setHasInitialized] = useState(false);
 
-  const { data: runsData, isLoading, error: fetchError } = useRunsForArea(areaId, subAreaId);
+  // Fetch ALL runs for the area (not filtered by subAreaId)
+  const { data: runsData, isLoading, error: fetchError } = useRunsForArea(areaId);
 
-  // Debug logging
-  useEffect(() => {
-    console.log('NZTopoMap - areaId:', areaId, 'subAreaId:', subAreaId);
-    console.log('NZTopoMap - runsData:', runsData);
-  }, [areaId, subAreaId, runsData]);
-
-  // Reset zoom flag when subAreaId changes
-  useEffect(() => {
-    setHasZoomed(false);
-  }, [subAreaId]);
-
-  // Process runs data and parse GPX files (only when runs structure changes, not status updates)
+  // Process runs data and parse GPX files
   useEffect(() => {
     if (!runsData || !Array.isArray(runsData)) return;
 
-    // Check if runs structure has actually changed (not just status updates)
-    const hasStructureChanged = 
-      prevRunsDataRef.current.length !== runsData.length ||
-      prevRunsDataRef.current.some((prevRun, index) => {
-        const currentRun = runsData[index];
-        return !currentRun || 
-               prevRun.id !== currentRun.id || 
-               prevRun.gpxPath !== currentRun.gpxPath ||
-               prevRun.name !== currentRun.name ||
-               prevRun.runNumber !== currentRun.runNumber;
-      });
-
-    if (!hasStructureChanged) {
-      // Only update statuses, don't reload the map
-      setRuns(prevRuns => 
-        prevRuns.map(prevRun => {
-          const updatedRun = runsData.find(run => run.id === prevRun.id);
-          if (updatedRun) {
-            return {
-              ...prevRun,
-              status: (updatedRun.status as 'open' | 'conditional' | 'closed') || prevRun.status
-            };
-          }
-          return prevRun;
-        })
-      );
-      return;
-    }
-
-    // Structure has changed, process runs
     const processRuns = async () => {
       setLoading(true);
       setError(null);
@@ -152,15 +148,7 @@ export default function NZTopoMap({
 
         for (const run of runsData) {
           if (run) {
-            // Fetch actual GPX data from the database path
-            console.log('Processing run:', {
-              id: run.id,
-              name: run.name,
-              runNumber: run.runNumber,
-              gpxPath: run.gpxPath,
-              subAreaId: run.subAreaId
-            });
-            const gpxData = await parseGPXToGeoJSON(run.gpxPath || '', subAreaId, run.runNumber);
+            const gpxData = await parseGPXToGeoJSON(run.gpxPath || '', run.subAreaId, run.runNumber);
             
             processedRuns.push({
               id: run.id || '',
@@ -168,29 +156,25 @@ export default function NZTopoMap({
               runNumber: run.runNumber || 0,
               status: (run.status as 'open' | 'conditional' | 'closed') || 'open',
               gpxPath: run.gpxPath || '',
+              subAreaId: run.subAreaId || '',
               gpxData
             });
           }
         }
 
-        console.log('Processed runs for map:', processedRuns.length, 'runs with GPX data');
-
         setRuns(processedRuns);
-        prevRunsDataRef.current = [...runsData];
         
-        // Auto-zoom to GPX bounds only on initial load, not on status updates
-        if (processedRuns.length > 0 && !hasZoomed) {
+        // Initial overview zoom - show ALL GPX files
+        if (processedRuns.length > 0 && !hasInitialized) {
           const bounds = calculateGPXBounds(processedRuns);
           if (bounds) {
-            console.log('Setting up initial view for bounds:', bounds);
-            // Set initial view state to center of bounds
             setViewState(prev => ({
               ...prev,
               longitude: (bounds.minLon + bounds.maxLon) / 2,
               latitude: (bounds.minLat + bounds.maxLat) / 2,
-              zoom: 11 // Higher initial zoom for better area visibility
+              zoom: 8 // Wide overview
             }));
-            setHasZoomed(true);
+            setHasInitialized(true);
           }
         }
       } catch (err) {
@@ -202,23 +186,14 @@ export default function NZTopoMap({
     };
 
     processRuns();
-  }, [runsData, subAreaId, hasZoomed]);
+  }, [runsData, hasInitialized]);
 
+  // Handle sub-area zoom when subAreaId changes
+  useEffect(() => {
+    if (!subAreaId || !mapRef.current || runs.length === 0) return;
 
-  // Filter runs with GPX data for rendering
-  const runsWithData = runs.filter(run => run.gpxData);
-
-  // Map click events removed - GPX tracks are no longer clickable
-
-  // Mouse enter/leave handlers removed - GPX tracks are no longer interactive
-
-  // Auto-zoom to appropriate level based on area bounds
-  const autoZoomToArea = useCallback(() => {
-    if (!mapRef.current || runs.length === 0) return;
-
-    const bounds = calculateGPXBounds(runs);
+    const bounds = calculateSubAreaBounds(runs, subAreaId);
     if (bounds) {
-      console.log('Auto-zooming to area bounds:', bounds);
       mapRef.current.fitBounds(
         [
           [bounds.minLon, bounds.minLat],
@@ -226,40 +201,43 @@ export default function NZTopoMap({
         ],
         {
           padding: 50,
-          maxZoom: 13,
-          duration: 0 // Instant zoom, no animation
+          maxZoom: 14,
+          duration: 1000
         }
       );
     }
-  }, [runs]);
+  }, [subAreaId, runs]);
 
-  // Memoized onLoad handlers to prevent infinite re-renders
+  // Filter runs with GPX data for rendering (NO FILTERING - show all runs)
+  const runsWithData = runs.filter(run => run.gpxData);
+
   const handleMapLoad = useCallback(() => {
-    console.log('Map loaded successfully');
-    
-    // Auto-zoom to area when map loads
-    if (runs.length > 0) {
-      autoZoomToArea();
+    // Initial overview zoom when map loads
+    if (runs.length > 0 && !hasInitialized) {
+      const bounds = calculateGPXBounds(runs);
+      if (bounds) {
+        mapRef.current?.fitBounds(
+          [
+            [bounds.minLon, bounds.minLat],
+            [bounds.maxLon, bounds.maxLat]
+          ],
+          {
+            padding: 100,
+            maxZoom: 8,
+            duration: 1000
+          }
+        );
+      }
     }
-  }, [runs, autoZoomToArea]);
-
-  // Auto-zoom when runs change (but not on status updates)
-  useEffect(() => {
-    if (runs.length > 0 && mapRef.current) {
-      // Immediate auto-zoom for better responsiveness
-      autoZoomToArea();
-    }
-  }, [runs, autoZoomToArea]);
+  }, [runs, hasInitialized]);
 
   const handleNZTopoSourceLoad = useCallback(() => {
-    console.log('NZ Topo source loaded successfully');
     setTileLoadError(null);
   }, []);
 
   const handleNZTopoSourceError = useCallback((error: unknown) => {
     console.error('NZ Topo source error:', error);
     setTileLoadError('Failed to load NZ Topo tiles - falling back to Mapbox');
-    // Fallback to Mapbox style
     setTimeout(() => {
       setUseNZTopo(false);
     }, 2000);
@@ -268,7 +246,6 @@ export default function NZTopoMap({
   const handleMapError = useCallback((evt: unknown) => {
     console.error('Map error:', evt);
     
-    // Handle specific Mapbox GL JS chunk loading errors
     if (evt && typeof evt === 'object' && 'error' in evt) {
       const error = (evt as { error: { message?: string } }).error;
       if (error && error.message && error.message.includes('Failed to load chunk')) {
@@ -283,75 +260,6 @@ export default function NZTopoMap({
   const handleMapMove = useCallback((evt: { viewState: typeof viewState }) => {
     setViewState(evt.viewState);
   }, []);
-
-  // Update map styles when runs change (optimized for status updates)
-  useEffect(() => {
-    if (!mapRef.current || runs.length === 0) return;
-
-    const updateMapStyles = () => {
-      const map = mapRef.current?.getMap();
-      if (!map) return;
-
-      runs.forEach(run => {
-        if (run.gpxData) {
-          const layerId = `run-${run.id}-track`;
-          const isHighlighted = highlightedRunId === run.id || selectedRunId === run.id || hoveredRunId === run.id;
-          
-          try {
-            if (map.getLayer(layerId)) {
-              // Only update if the layer exists
-              map.setPaintProperty(layerId, 'line-color', STATUS_COLORS[run.status]);
-              map.setPaintProperty(layerId, 'line-width', isHighlighted ? 5 : 3);
-              map.setPaintProperty(layerId, 'line-opacity', isHighlighted ? STATUS_OPACITY.highlighted : STATUS_OPACITY.normal);
-            }
-          } catch (error) {
-            console.warn('Failed to update map styles:', error);
-          }
-        }
-      });
-    };
-
-    // Use requestAnimationFrame for smoother updates
-    const rafId = requestAnimationFrame(updateMapStyles);
-
-    return () => cancelAnimationFrame(rafId);
-  }, [runs, highlightedRunId, selectedRunId, hoveredRunId]);
-
-  // Handle map style load to ensure layers are available
-  useEffect(() => {
-    const map = mapRef.current?.getMap();
-    if (!map) return;
-
-    const handleStyleLoad = () => {
-      // Re-apply styles when map style loads
-      const updateMapStyles = () => {
-        runsWithData.forEach(run => {
-          if (run.gpxData) {
-            const layerId = `run-${run.id}-track`;
-            const isHighlighted = highlightedRunId === run.id || selectedRunId === run.id || hoveredRunId === run.id;
-            
-            try {
-              if (map.getLayer(layerId)) {
-                map.setPaintProperty(layerId, 'line-color', STATUS_COLORS[run.status]);
-                map.setPaintProperty(layerId, 'line-width', isHighlighted ? 5 : 3);
-                map.setPaintProperty(layerId, 'line-opacity', isHighlighted ? STATUS_OPACITY.highlighted : STATUS_OPACITY.normal);
-              }
-            } catch (error) {
-              console.warn('Failed to update map styles on style load:', error);
-            }
-          }
-        });
-      };
-
-      requestAnimationFrame(updateMapStyles);
-    };
-    
-    map.on('style.load', handleStyleLoad);
-    
-    return () => {
-      map.off('style.load', handleStyleLoad);
-    };
-  }, [runsWithData, highlightedRunId, selectedRunId, hoveredRunId]);
 
   // Check for Mapbox access token
   const mapboxToken = process.env.NEXT_PUBLIC_MAPBOX_ACCESS_TOKEN;
@@ -432,7 +340,6 @@ export default function NZTopoMap({
 
   return (
     <div className="relative h-full w-full min-h-[400px] sm:min-h-[500px]">
-      {/* Map Container */}
       <div className="h-full w-full">
         <Map
           ref={mapRef}
@@ -444,119 +351,115 @@ export default function NZTopoMap({
           style={{ width: '100%', height: '100%' }}
           mapStyle="mapbox://styles/mapbox/outdoors-v12"
         >
-            {/* NZ Topo 50 Base Layer - Rendered First */}
-            {useNZTopo && (
-              <Source
-                id="nz-topo-source"
+          {/* NZ Topo 50 Base Layer */}
+          {useNZTopo && (
+            <Source
+              id="nz-topo-source"
+              type="raster"
+              tiles={[
+                `https://basemaps.linz.govt.nz/v1/tiles/topo-raster/WebMercatorQuad/{z}/{x}/{y}.webp?api=c01k5mkf2a6g80h6va1rny04y0m`,
+              ]}
+              tileSize={256}
+              attribution="© LINZ CC BY 4.0"
+              onError={handleNZTopoSourceError}
+              onLoad={handleNZTopoSourceLoad}
+            >
+              <Layer
+                id="nz-topo-layer"
                 type="raster"
-                tiles={[
-                  `https://basemaps.linz.govt.nz/v1/tiles/topo-raster/WebMercatorQuad/{z}/{x}/{y}.webp?api=c01k5mkf2a6g80h6va1rny04y0m`,
-                  
-                ]}
-                tileSize={256}
-                attribution="© LINZ CC BY 4.0"
-                onError={handleNZTopoSourceError}
-                onLoad={handleNZTopoSourceLoad}
+                paint={{
+                  'raster-opacity': 1
+                }}
+              />
+            </Source>
+          )}
+
+          {/* GPX Track Layers - ALL RUNS VISIBLE */}
+          {runsWithData.map(run => {
+            if (!run.gpxData) return null;
+
+            const isHighlighted = highlightedRunId === run.id || selectedRunId === run.id || hoveredRunId === run.id;
+            const layerId = `run-${run.id}-track`;
+
+            return (
+              <Source 
+                key={`${run.id}-${run.status}`} 
+                id={`run-${run.id}-source`} 
+                type="geojson" 
+                data={run.gpxData}
               >
                 <Layer
-                  id="nz-topo-layer"
-                  type="raster"
+                  id={layerId}
+                  type="line"
                   paint={{
-                    'raster-opacity': 1
+                    'line-color': STATUS_COLORS[run.status],
+                    'line-width': isHighlighted ? 5 : 3,
+                    'line-opacity': isHighlighted ? STATUS_OPACITY.highlighted : STATUS_OPACITY.normal
+                  }}
+                  layout={{
+                    'line-join': 'round',
+                    'line-cap': 'round'
                   }}
                 />
               </Source>
-            )}
+            );
+          })}
 
-            {/* GPX Track Layers */}
-        {runsWithData.map(run => {
-          if (!run.gpxData) return null;
+          {/* Run Number Labels - ALL RUNS VISIBLE */}
+          {runsWithData.map(run => {
+            if (!run.gpxData || !run.gpxData.features || run.gpxData.features.length === 0) return null;
 
-          const isHighlighted = highlightedRunId === run.id || selectedRunId === run.id || hoveredRunId === run.id;
-          const layerId = `run-${run.id}-track`;
+            const firstFeature = run.gpxData.features[0];
+            if (!firstFeature.geometry || firstFeature.geometry.type !== 'LineString') return null;
 
-          return (
-            <Source 
-              key={`${run.id}-${run.status}`} 
-              id={`run-${run.id}-source`} 
-              type="geojson" 
-                    data={run.gpxData}
-            >
-              <Layer
-                id={layerId}
-                type="line"
-                paint={{
-                  'line-color': STATUS_COLORS[run.status],
-                  'line-width': isHighlighted ? 5 : 3,
-                  'line-opacity': isHighlighted ? STATUS_OPACITY.highlighted : STATUS_OPACITY.normal
-                }}
-                layout={{
-                  'line-join': 'round',
-                  'line-cap': 'round'
-                }}
-              />
-            </Source>
-          );
-        })}
+            const coordinates = firstFeature.geometry.coordinates as number[][];
+            if (coordinates.length === 0) return null;
 
-        {/* Run Number Labels - positioned at the start of each track */}
-        {runsWithData.map(run => {
-          if (!run.gpxData || !run.gpxData.features || run.gpxData.features.length === 0) return null;
+            const startPoint = coordinates[0];
+            const labelData: FeatureCollection<Point> = {
+              type: 'FeatureCollection',
+              features: [{
+                type: 'Feature',
+                properties: {
+                  runId: run.id,
+                  runNumber: run.runNumber,
+                  status: run.status
+                },
+                geometry: {
+                  type: 'Point',
+                  coordinates: startPoint
+                }
+              }]
+            };
 
-          // Create a point feature at the start of the track for the label
-          const firstFeature = run.gpxData.features[0];
-          if (!firstFeature.geometry || firstFeature.geometry.type !== 'LineString') return null;
-
-          const coordinates = firstFeature.geometry.coordinates as number[][];
-          if (coordinates.length === 0) return null;
-
-          const startPoint = coordinates[0];
-          const labelData: FeatureCollection<Point> = {
-            type: 'FeatureCollection',
-            features: [{
-              type: 'Feature',
-              properties: {
-                runId: run.id,
-                runNumber: run.runNumber,
-                status: run.status
-              },
-              geometry: {
-                type: 'Point',
-                coordinates: startPoint
-              }
-            }]
-          };
-
-          return (
-            <Source 
-              key={`label-${run.id}-${run.status}`} 
-              id={`run-${run.id}-label-source`} 
-              type="geojson" 
-              data={labelData}
-            >
-              <Layer
-                id={`run-${run.id}-label`}
-                type="symbol"
-                layout={{
-                  'text-field': run.runNumber.toString(),
-                  'text-size': 14,
-                  'text-offset': [0, -1.5],
-                  'text-anchor': 'center',
-                  'text-allow-overlap': true
-                }}
-                paint={{
-                  'text-color': '#ffffff',
-                  'text-halo-color': STATUS_COLORS[run.status],
-                  'text-halo-width': 2
-                }}
-              />
-            </Source>
-          );
-        })}
+            return (
+              <Source 
+                key={`label-${run.id}-${run.status}`} 
+                id={`run-${run.id}-label-source`} 
+                type="geojson" 
+                data={labelData}
+              >
+                <Layer
+                  id={`run-${run.id}-label`}
+                  type="symbol"
+                  layout={{
+                    'text-field': run.runNumber.toString(),
+                    'text-size': 14,
+                    'text-offset': [0, -1.5],
+                    'text-anchor': 'center',
+                    'text-allow-overlap': true
+                  }}
+                  paint={{
+                    'text-color': '#ffffff',
+                    'text-halo-color': STATUS_COLORS[run.status],
+                    'text-halo-width': 2
+                  }}
+                />
+              </Source>
+            );
+          })}
         </Map>
       </div>
-
-      
     </div>
   );
 }

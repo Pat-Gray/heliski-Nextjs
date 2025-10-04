@@ -219,7 +219,7 @@ export default function RunDetailView({ runId }: RunDetailViewProps) {
           <div className="ml-auto flex items-center gap-2">
             <GpxUpdateButton 
               runId={selectedRun.id} 
-              currentGpxPath={selectedRun.gpxPath}
+              currentGpxPath={selectedRun.gpxPath ?? null}
             />
             {(selectedRun.gpxPath || (selectedRun.caltopoMapId && selectedRun.caltopoFeatureId)) ? (
               <Button
@@ -291,9 +291,9 @@ export default function RunDetailView({ runId }: RunDetailViewProps) {
         {showMap && selectedRun.gpxPath ? (
           <div className="h-full">
             <NZTopoMap
-              areaId={selectedRun.subAreaId || ''}
-              subAreaId={selectedRun.subAreaId || ''}
-              selectedRunId={selectedRun.id}
+              areaId={selectedRun.subAreaId ?? ''}
+              subAreaId={selectedRun.subAreaId ?? ''}
+              selectedRunId={selectedRun.id ?? ''}
             />
           </div>
         ) : showMap && (selectedRun.caltopoMapId && selectedRun.caltopoFeatureId) ? (

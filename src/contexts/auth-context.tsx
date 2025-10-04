@@ -170,14 +170,14 @@ export function AuthProvider({ children }: AuthProviderProps) {
   const isSuperAdmin = getUserRole(user) === 'super_admin';
   const isAuthenticated = !!user;
 
-  // Debug logging (disabled during build)
+  // Debug logging (reduced frequency in development)
   if (typeof window !== 'undefined' && process.env.NODE_ENV === 'development') {
-    console.log('Auth Debug:', {
-      user,
-      role: getUserRole(user),  
-      isSuperAdmin,
-      isAuthenticated
-    });
+    // console.log('Auth Debug:', {
+    //   user: user ? 'authenticated' : 'null',
+    //   role: getUserRole(user),  
+    //   isSuperAdmin,
+    //   isAuthenticated
+    // });
   }
 
   const value = {

@@ -26,7 +26,7 @@ export interface ParsedGPX {
 
 export function parseGPX(gpxContent: string): ParsedGPX {
   try {
-    console.log('Parsing GPX content, length:', gpxContent.length);
+    // Parsing GPX content
     const parser = new DOMParser();
     const doc = parser.parseFromString(gpxContent, 'text/xml');
     
@@ -122,7 +122,7 @@ export function parseGPX(gpxContent: string): ParsedGPX {
     });
   }
 
-    console.log('GPX parsing completed, tracks found:', tracks.length);
+    // GPX parsing completed
     return {
       tracks,
       bounds: {
@@ -160,15 +160,8 @@ export function getTrackColor(index: number): string {
 
 export async function fetchGPXFile(url: string): Promise<string | null> {
   try {
-    console.log('Fetching GPX file from:', url);
+    // Fetching GPX file
     const response = await fetch(url);
-    
-    console.log('GPX fetch response:', {
-      status: response.status,
-      statusText: response.statusText,
-      ok: response.ok,
-      headers: Object.fromEntries(response.headers.entries())
-    });
     
     if (!response.ok) {
       const errorText = await response.text().catch(() => 'Unable to read error response');
@@ -178,7 +171,7 @@ export async function fetchGPXFile(url: string): Promise<string | null> {
     }
     
     const text = await response.text();
-    console.log('GPX file fetched successfully, length:', text.length);
+    // GPX file fetched successfully
     return text;
   } catch (error) {
     console.warn('Error fetching GPX file, using fallback:', {
@@ -287,34 +280,25 @@ export async function parseGPXToGeoJSON(
   runNumber?: number
 ): Promise<FeatureCollection<LineString>> {
   try {
-    console.log('parseGPXToGeoJSON called with:', { gpxPath, subAreaId, runNumber });
-    
     let gpxContent: string;
     
     // Try to fetch the actual GPX file if path is provided
     if (gpxPath && gpxPath.trim() !== '') {
-      console.log('Fetching GPX file from:', gpxPath);
       const fetchedContent = await fetchGPXFile(gpxPath);
       
       if (fetchedContent) {
-        console.log('Successfully fetched GPX file, length:', fetchedContent.length);
         gpxContent = fetchedContent;
       } else {
-        console.log('Failed to fetch GPX file, using sample data');
         gpxContent = generateSampleGPX(subAreaId, runNumber);
       }
     } else {
-      console.log('No GPX path provided, generating sample data');
       gpxContent = generateSampleGPX(subAreaId, runNumber);
     }
 
-    console.log('Parsing GPX content...');
     const parsedGPX = parseGPX(gpxContent);
     const runId = `run-${runNumber || 1}`;
     
-    console.log('Converting to GeoJSON...');
     const result = tracksToGeoJSON(parsedGPX.tracks, runId, runNumber || 1);
-    console.log('GeoJSON conversion completed, features:', result.features.length);
     
     return result;
   } catch (error) {
@@ -327,7 +311,6 @@ export async function parseGPXToGeoJSON(
     });
     
     // Return sample data on error
-    console.log('Falling back to sample data');
     return generateSampleGeoJSON(subAreaId, runNumber);
   }
 }

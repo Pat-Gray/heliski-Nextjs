@@ -27,7 +27,7 @@ export function PrintProvider({ children }: { children: ReactNode }) {
 
   const triggerPrint = () => {
     if (printData) {
-      console.log('🖨️ Print provider: triggering print...');
+      // Triggering print dialog
       // Small delay to ensure content is rendered
       setTimeout(() => {
         try {
@@ -41,7 +41,7 @@ export function PrintProvider({ children }: { children: ReactNode }) {
           console.error('❌ Print failed:', error);
           // Try again after a short delay
           setTimeout(() => {
-            console.log('🖨️ Retrying print...');
+            // Retrying print
             window.print();
           }, 500);
         }

@@ -14,18 +14,13 @@ interface GPXUrlResponse {
 }
 
 export async function POST(request: NextRequest) {
-  console.log('🔗 GPX URL API - Request Started:', {
-    url: request.url,
-    timestamp: new Date().toISOString()
-  });
+  // GPX URL API request started
 
   try {
     const body: GPXUrlRequest = await request.json();
     const { runId } = body;
 
-    console.log('📝 GPX URL Request:', {
-      runId: runId ? `${runId.substring(0, 8)}...` : 'none'
-    });
+    // Processing GPX URL request
 
     if (!runId) {
       return NextResponse.json(
@@ -50,12 +45,7 @@ export async function POST(request: NextRequest) {
 
     const run = runData;
 
-    console.log('📊 Run data:', {
-      runId: run.id,
-      name: run.name,
-      hasCalTopoLink: !!(run.caltopo_map_id && run.caltopo_feature_id),
-      hasGpxPath: !!run.gpx_path
-    });
+    // Run data retrieved
 
     // Check if run is linked to CalTopo
     if (!run.caltopo_map_id || !run.caltopo_feature_id) {
@@ -66,29 +56,26 @@ export async function POST(request: NextRequest) {
       });
     }
 
-    // Check if we already have a URL stored (public or signed)
-    if (run.gpx_path) {
-      console.log('✅ Using stored URL:', {
-        runId: run.id,
-        urlLength: run.gpx_path.length,
-        urlPreview: run.gpx_path.substring(0, 100) + '...',
-        isPublicUrl: run.gpx_path.includes('/public/')
-      });
-
+    // Always generate a fresh public URL to avoid JWT expiry issues
+    // Check if GPX exists in storage first
+    const exists = await gpxExists(run.caltopo_map_id, run.caltopo_feature_id);
+    
+    if (exists) {
+      // Generate fresh public URL for existing GPX
+      const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+      const publicUrl = `${supabaseUrl}/storage/v1/object/public/heli-ski-files/runs/${run.caltopo_map_id}/${run.caltopo_feature_id}.gpx`;
+      
       const response: GPXUrlResponse = {
         success: true,
-        gpxUrl: run.gpx_path,
+        gpxUrl: publicUrl,
         cached: true
       };
 
       return NextResponse.json(response);
     }
-
-    // Check if GPX exists in storage
-    const exists = await gpxExists(run.caltopo_map_id, run.caltopo_feature_id);
     
     if (!exists) {
-      console.log('⚠️ GPX not cached, triggering cache...');
+      // GPX not cached, triggering cache
       
       // Trigger cache-gpx API
       try {
@@ -109,7 +96,7 @@ export async function POST(request: NextRequest) {
         }
 
         const cacheResult = await cacheResponse.json();
-        console.log('✅ GPX cached successfully:', cacheResult);
+        // GPX cached successfully
         
         // Return the public URL from cache result
         const response: GPXUrlResponse = {
@@ -120,7 +107,7 @@ export async function POST(request: NextRequest) {
 
         return NextResponse.json(response);
       } catch (cacheError: unknown) {
-        console.error('❌ Failed to cache GPX:', cacheError);
+        // Failed to cache GPX
         return NextResponse.json({
           success: false,
           cached: false,
@@ -132,14 +119,9 @@ export async function POST(request: NextRequest) {
     // Generate public URL (fallback case)
     try {
       const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-      const gpxUrl = `${supabaseUrl}/storage/v1/object/public/gpx/gpx/${run.caltopo_map_id}/${run.caltopo_feature_id}.gpx`;
+      const gpxUrl = `${supabaseUrl}/storage/v1/object/public/heli-ski-files/runs/${run.caltopo_map_id}/${run.caltopo_feature_id}.gpx`;
       
-      console.log('✅ Public URL generated (fallback):', {
-        runId: run.id,
-        mapId: run.caltopo_map_id.substring(0, 8) + '...',
-        featureId: run.caltopo_feature_id.substring(0, 8) + '...',
-        urlLength: gpxUrl.length
-      });
+      // Public URL generated (fallback)
 
       const response: GPXUrlResponse = {
         success: true,
@@ -150,7 +132,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json(response);
 
     } catch (urlError: unknown) {
-      console.error('❌ Failed to generate public URL:', urlError);
+      // Failed to generate public URL
       return NextResponse.json({
         success: false,
         cached: exists,
@@ -159,11 +141,7 @@ export async function POST(request: NextRequest) {
     }
 
   } catch (error: unknown) {
-    console.error('❌ GPX URL API Error:', {
-      errorMessage: error instanceof Error ? error.message : 'Unknown error',
-      errorStack: error instanceof Error ? error.stack : undefined,
-      errorName: error instanceof Error ? error.name : 'Unknown'
-    });
+    // GPX URL API Error
 
     return NextResponse.json({
       success: false,

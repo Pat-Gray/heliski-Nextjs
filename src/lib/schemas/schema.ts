@@ -1,168 +1,153 @@
-import { sql } from "drizzle-orm";
-import { pgTable, text, varchar, integer, timestamp, json } from "drizzle-orm/pg-core";
-import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
-export const areas = pgTable("areas", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  name: text("name").notNull(),
-  createdAt: timestamp("created_at").defaultNow(),
+// Base schemas for validation
+export const areaSchema = z.object({
+  id: z.string().uuid(),
+  name: z.string().min(1),
+  createdAt: z.date(),
 });
 
-export const subAreas = pgTable("sub_areas", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  name: text("name").notNull(),
-  areaId: varchar("area_id").notNull().references(() => areas.id),
-  createdAt: timestamp("created_at").defaultNow(),
+export const subAreaSchema = z.object({
+  id: z.string().uuid(),
+  name: z.string().min(1),
+  areaId: z.string().uuid(),
+  createdAt: z.date(),
 });
 
-export const runs = pgTable("runs", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  name: text("name").notNull(),
-  subAreaId: varchar("sub_area_id").notNull().references(() => subAreas.id),
-  runNumber: integer("run_number").notNull().default(1), // Auto-increment within sub-area
-  runDescription: text("run_description"), // Optional run description
-  runNotes: text("run_notes"), // Optional run notes
-  aspect: text("aspect").notNull(), // SW, W, E, NW, etc.
-  elevationMax: integer("elevation_max").notNull(), // meters
-  elevationMin: integer("elevation_min").notNull(), // meters
-  status: text("status").notNull().default("open"), // open, conditional, closed
-  statusComment: text("status_comment"),
-  gpxPath: text("gpx_path"), // GPX file path
-  runPhoto: text("run_photo"), // Primary run photo
-  avalanchePhoto: text("avalanche_photo"), // Avalanche path photo
-  additionalPhotos: json("additional_photos").$type<string[]>().default([]), // Additional images
+export const runSchema = z.object({
+  id: z.string().uuid(),
+  name: z.string().min(1),
+  subAreaId: z.string().uuid(),
+  runNumber: z.number().int().positive(),
+  runDescription: z.string().nullable().optional(),
+  runNotes: z.string().nullable().optional(),
+  aspect: z.enum(["N", "NE", "E", "SE", "S", "SW", "W", "NW"]),
+  elevationMax: z.number().int(),
+  elevationMin: z.number().int(),
+  status: z.enum(["open", "conditional", "closed"]),
+  statusComment: z.string().nullable().optional(),
+  gpxPath: z.string().nullable().optional(),
+  runPhoto: z.string().nullable().optional(),
+  avalanchePhoto: z.string().nullable().optional(),
+  additionalPhotos: z.array(z.string()).default([]),
   // CalTopo integration fields
-  caltopoMapId: varchar("caltopo_map_id"), // CalTopo map ID
-  caltopoFeatureId: varchar("caltopo_feature_id"), // CalTopo feature ID
-  gpxUpdatedAt: timestamp("gpx_updated_at"), // When GPX was last cached
-  lastUpdated: timestamp("last_updated").defaultNow(),
-  createdAt: timestamp("created_at").defaultNow(),
+  caltopoMapId: z.string().nullable().optional(),
+  caltopoFeatureId: z.string().nullable().optional(),
+  gpxUpdatedAt: z.date().nullable().optional(),
+  lastUpdated: z.date(),
+  createdAt: z.date(),
 });
 
-export const dailyPlans = pgTable("daily_plans", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  planDate: timestamp("plan_date").notNull(),
-  runIds: json("run_ids").$type<string[]>().notNull(),
-  statusSnapshot: json("status_snapshot").$type<Array<{ runId: string; status: 'open'|'conditional'|'closed'; statusComment: string|null }>>().notNull(),
-  notes: text("notes"),
-  createdAt: timestamp("created_at").defaultNow(),
+export const dailyPlanSchema = z.object({
+  id: z.string().uuid(),
+  planDate: z.date(),
+  runIds: z.array(z.string().uuid()),
+  statusSnapshot: z.array(z.object({
+    runId: z.string().uuid(),
+    status: z.enum(["open", "conditional", "closed"]),
+    statusComment: z.string().nullable(),
+  })),
+  notes: z.string().nullable().optional(),
+  createdAt: z.date(),
 });
 
-export const incidents = pgTable("incidents", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  runId: varchar("run_id").notNull().references(() => runs.id),
-  incidentDate: timestamp("incident_date").notNull(),
-  trigger: text("trigger").notNull(), // human, natural, explosive
-  peopleInvolved: integer("people_involved").notNull(),
-  snowProfile: text("snow_profile"),
-  weatherConditions: text("weather_conditions"),
-  description: text("description").notNull(),
-  severity: text("severity").notNull(), // low, moderate, high, extreme
-  photosPaths: json("photos_paths").$type<string[]>().default([]),
-  createdAt: timestamp("created_at").defaultNow(),
+export const incidentSchema = z.object({
+  id: z.string().uuid(),
+  runId: z.string().uuid(),
+  incidentDate: z.date(),
+  trigger: z.enum(["human", "natural", "explosive"]),
+  peopleInvolved: z.number().int().min(0),
+  snowProfile: z.string().nullable().optional(),
+  weatherConditions: z.string().nullable().optional(),
+  description: z.string().min(1),
+  severity: z.enum(["low", "moderate", "high", "extreme"]),
+  photosPaths: z.array(z.string()).default([]),
+  createdAt: z.date(),
 });
 
-// Insert schemas
-export const insertAreaSchema = createInsertSchema(areas).omit({
+export const userSchema = z.object({
+  id: z.string().uuid(),
+  username: z.string().min(1),
+  password: z.string().min(1),
+});
+
+// Insert schemas (for creating new records)
+export const insertAreaSchema = areaSchema.omit({
   id: true,
   createdAt: true,
 });
 
-export const insertSubAreaSchema = createInsertSchema(subAreas).omit({
+export const insertSubAreaSchema = subAreaSchema.omit({
   id: true,
   createdAt: true,
-}).extend({
-  areaId: z.string(),
 });
 
-export const insertRunSchema = createInsertSchema(runs).omit({
+export const insertRunSchema = runSchema.omit({
   id: true,
   createdAt: true,
   lastUpdated: true,
-  runNumber: true, // Remove runNumber from required fields - will be auto-calculated
+  runNumber: true, // Will be auto-calculated
 }).extend({
-  status: z.enum(["open", "conditional", "closed"]),
-  aspect: z.enum(["N", "NE", "E", "SE", "S", "SW", "W", "NW"]),
   runDescription: z.string().optional(),
   runNotes: z.string().optional(),
   statusComment: z.string().nullable().optional(),
   gpxPath: z.string().nullable().optional(),
   runPhoto: z.string().nullable().optional(),
   avalanchePhoto: z.string().nullable().optional(),
-  additionalPhotos: z.array(z.string()).nullable().optional().default([]),
-  // CalTopo integration fields
+  additionalPhotos: z.array(z.string()).optional().default([]),
   caltopoMapId: z.string().nullable().optional(),
   caltopoFeatureId: z.string().nullable().optional(),
   gpxUpdatedAt: z.date().nullable().optional(),
 });
 
-// Schema for partial updates (without strict validation)
+export const insertDailyPlanSchema = dailyPlanSchema.omit({
+  id: true,
+  createdAt: true,
+}).extend({
+  planDate: z.coerce.date(),
+});
+
+export const insertIncidentSchema = incidentSchema.omit({
+  id: true,
+  createdAt: true,
+});
+
+export const insertUserSchema = userSchema.omit({
+  id: true,
+});
+
+// Update schemas (for partial updates)
 export const updateRunSchema = z.object({
   name: z.string().optional(),
-  subAreaId: z.string().optional(),
-  runNumber: z.number().optional(),
+  subAreaId: z.string().uuid().optional(),
+  runNumber: z.number().int().positive().optional(),
   runDescription: z.string().optional(),
   runNotes: z.string().optional(),
   aspect: z.enum(["N", "NE", "E", "SE", "S", "SW", "W", "NW"]).optional(),
-  elevationMax: z.number().optional(),
-  elevationMin: z.number().optional(),
+  elevationMax: z.number().int().optional(),
+  elevationMin: z.number().int().optional(),
   status: z.enum(["open", "conditional", "closed"]).optional(),
   statusComment: z.string().nullable().optional(),
   gpxPath: z.string().optional(),
   runPhoto: z.string().optional(),
   avalanchePhoto: z.string().optional(),
   additionalPhotos: z.array(z.string()).optional(),
-  // CalTopo integration fields
   caltopoMapId: z.string().nullable().optional(),
   caltopoFeatureId: z.string().nullable().optional(),
   gpxUpdatedAt: z.date().nullable().optional(),
 });
 
-export const insertDailyPlanSchema = createInsertSchema(dailyPlans).omit({
-  id: true,
-  createdAt: true,
-}).extend({
-  planDate: z.coerce.date(),
-  statusSnapshot: z.array(z.object({
-    runId: z.string(),
-    status: z.enum(["open", "conditional", "closed"]),
-    statusComment: z.string().nullable(),
-  })),
-});
-
-export const insertIncidentSchema = createInsertSchema(incidents).omit({
-  id: true,
-  createdAt: true,
-}).extend({
-  trigger: z.enum(["human", "natural", "explosive"]),
-  severity: z.enum(["low", "moderate", "high", "extreme"]),
-});
-
 // Types
-export type Area = typeof areas.$inferSelect;
-export type SubArea = typeof subAreas.$inferSelect;
-export type Run = typeof runs.$inferSelect;
-export type DailyPlan = typeof dailyPlans.$inferSelect;
-export type Incident = typeof incidents.$inferSelect;
+export type Area = z.infer<typeof areaSchema>;
+export type SubArea = z.infer<typeof subAreaSchema>;
+export type Run = z.infer<typeof runSchema>;
+export type DailyPlan = z.infer<typeof dailyPlanSchema>;
+export type Incident = z.infer<typeof incidentSchema>;
+export type User = z.infer<typeof userSchema>;
 
 export type InsertArea = z.infer<typeof insertAreaSchema>;
 export type InsertSubArea = z.infer<typeof insertSubAreaSchema>;
 export type InsertRun = z.infer<typeof insertRunSchema>;
 export type InsertDailyPlan = z.infer<typeof insertDailyPlanSchema>;
 export type InsertIncident = z.infer<typeof insertIncidentSchema>;
-
-// Users table (keeping existing)
-export const users = pgTable("users", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  username: text("username").notNull().unique(),
-  password: text("password").notNull(),
-});
-
-export const insertUserSchema = createInsertSchema(users).pick({
-  username: true,
-  password: true,
-});
-
 export type InsertUser = z.infer<typeof insertUserSchema>;
-export type User = typeof users.$inferSelect;
