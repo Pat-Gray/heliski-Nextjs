@@ -116,6 +116,7 @@ export default function FileUpload({
 
   const getIcon = () => {
     if (fileType === 'gpx') return <MapPin className="w-5 h-5" />;
+    // eslint-disable-next-line jsx-a11y/alt-text
     return <Image className="w-5 h-5" />;
   };
 

@@ -11,7 +11,6 @@ import { Printer, ChevronDown, ChevronRight, Calendar as CalendarIcon, MapPin, C
 import { usePrint } from "@/components/print-provider";
 import type { DailyPlan, Run, Area, SubArea } from "@/lib/schemas/schema";
 import { queryFn } from "@/lib/queryClient";
-import { cn } from "@/lib/utils";
 
 // Memoized components for better performance
 const StatusBadge = memo(({ status }: { status: string }) => {

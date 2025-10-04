@@ -60,7 +60,23 @@ export async function GET(request: NextRequest) {
 
     // Get images for these features separately
     const featureIds = features?.map(f => f.feature_id) || [];
-    let images: any[] = [];
+    let images: Array<{
+      id: string;
+      image_id: string;
+      feature_id: string;
+      title?: string;
+      description?: string;
+      comment?: string;
+      notes?: string;
+      local_file_url: string;
+      caltopo_url?: string;
+      file_size?: number;
+      file_size_bytes?: number;
+      mime_type?: string;
+      content_type?: string;
+      caltopo_created_at?: string;
+      caltopo_updated_at?: string;
+    }> = [];
     
     if (featureIds.length > 0) {
       const { data: imagesData, error: imagesError } = await supabase

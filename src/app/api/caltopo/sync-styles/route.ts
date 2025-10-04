@@ -121,7 +121,7 @@ export async function POST(request: NextRequest) {
           credentialSecret
         );
 
-        if (!mapData || !mapData.state?.features) {
+        if (!mapData || !(mapData as { state?: { features?: unknown[] } }).state?.features) {
           throw new Error(`Failed to fetch map data for ${mapId}`);
         }
 
@@ -130,8 +130,8 @@ export async function POST(request: NextRequest) {
         // Update each run's feature in the map
         for (const run of mapRuns) {
           try {
-            const feature = mapData.state.features.find(
-              (f: any) => f.id === run.caltopo_feature_id
+            const feature = (mapData as { state: { features: Array<{ id: string; properties?: Record<string, unknown> }> } }).state.features.find(
+              (f: { id: string }) => f.id === run.caltopo_feature_id
             );
 
             if (!feature) {

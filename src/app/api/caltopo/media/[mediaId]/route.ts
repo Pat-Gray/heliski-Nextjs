@@ -3,10 +3,10 @@ import { caltopoRequestBinary } from '../../../../../utils/caltopo';
 
 export async function GET(
   request: NextRequest,
-  { params }: { params: { mediaId: string } }
+  { params }: { params: Promise<{ mediaId: string }> }
 ) {
   try {
-    const { mediaId } = params;
+    const { mediaId } = await params;
 
     if (!mediaId) {
       return NextResponse.json({ error: 'Missing mediaId' }, { status: 400 });

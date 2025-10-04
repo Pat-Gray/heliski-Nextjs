@@ -132,7 +132,7 @@ export async function DELETE(
             const path = pathParts.slice(bucketIndex + 1).join('/');
             await deleteFile('heli-ski-files', path);
           }
-        } catch (error) {
+        } catch {
           // Silently continue if file deletion fails
         }
       }

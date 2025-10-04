@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import Map, { Source, Layer, MapRef, MapMouseEvent } from 'react-map-gl/mapbox';
 import type { FeatureCollection, LineString, Point } from 'geojson';
 import { useRunsForArea } from '@/contexts/hooks/use-runs-for-area';
@@ -153,7 +153,7 @@ function calculateSubAreaBounds(runs: RunData[], targetSubAreaId: string) {
   };
 }
 
-export default function NZTopoMap({ 
+const NZTopoMap = React.memo(function NZTopoMap({ 
   areaId, 
   subAreaId, 
   selectedRunId,
@@ -335,6 +335,12 @@ export default function NZTopoMap({
   }, [showOperations, operationsFeatures.length]);
 
   // Process runs data with GPX caching and memoization
+  // Only re-process when the actual run structure changes, not status updates
+  const runsStructureKey = useMemo(() => {
+    if (!runsData || !Array.isArray(runsData)) return '';
+    return runsData.map(run => `${run.id}-${run.gpxPath}-${run.subAreaId}-${run.runNumber}`).join('|');
+  }, [runsData]);
+
   useEffect(() => {
     if (!runsData || !Array.isArray(runsData)) return;
 
@@ -398,7 +404,31 @@ export default function NZTopoMap({
     };
 
     processRuns();
-  }, [runsData, hasInitialized]);
+  }, [runsStructureKey, hasInitialized, runsData]);
+
+  // Update run status without re-processing GPX data
+  // Only update when status changes, not when runsData structure changes
+  const statusUpdateKey = useMemo(() => {
+    if (!runsData || !Array.isArray(runsData)) return '';
+    return runsData.map(run => `${run.id}-${run.status}`).join('|');
+  }, [runsData]);
+
+  useEffect(() => {
+    if (!runsData || !Array.isArray(runsData)) return;
+    
+    setRuns(currentRuns => {
+      return currentRuns.map(currentRun => {
+        const updatedRun = runsData.find(run => run.id === currentRun.id);
+        if (updatedRun) {
+          return {
+            ...currentRun,
+            status: (updatedRun.status as 'open' | 'conditional' | 'closed') || 'open'
+          };
+        }
+        return currentRun;
+      });
+    });
+  }, [statusUpdateKey, runsData]);
 
   // Cleanup GPX cache on unmount
   useEffect(() => {
@@ -1276,4 +1306,6 @@ export default function NZTopoMap({
       />
     </div>
   );
-}
+});
+
+export default NZTopoMap;

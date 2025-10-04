@@ -1,11 +1,11 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
+import { StatusCommentAutocomplete } from "@/components/ui/status-comment-autocomplete";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Mountain,CheckCircle, MapPin, GripVertical, Plus, Printer, Loader2 } from "lucide-react";
 import { useToast } from "@/contexts/hooks/use-toast";
@@ -32,7 +32,7 @@ import DashboardFilters from "@/components/dashboard-filters";
 import { usePrint } from "@/components/print-provider";
 import type { Run, InsertDailyPlan, Area, SubArea } from "@/lib/schemas/schema";
 
-export default function Dashboard() {
+const Dashboard = React.memo(function Dashboard() {
   const [selectedRunId] = useState<string | null>(null);
   const [focusStatusComment, setFocusStatusComment] = useState(false);
   const [selectedAreas, setSelectedAreas] = useState<Set<string>>(new Set());
@@ -46,6 +46,7 @@ export default function Dashboard() {
   const [showAvalanchePaths, setShowAvalanchePaths] = useState(false);
   const [showOperations, setShowOperations] = useState(false);
   const [statusCommentInputs, setStatusCommentInputs] = useState<Record<string, string>>({});
+  const [autoOpenComment, setAutoOpenComment] = useState<string | null>(null);
   const updateTimeoutsRef = useRef<Record<string, NodeJS.Timeout>>({});
   const [hoveredRunId, setHoveredRunId] = useState<string | null>(null);
   const [showRunDetailModal, setShowRunDetailModal] = useState(false);
@@ -130,11 +131,13 @@ export default function Dashboard() {
   });
 
   // Filter runs based on selected areas
-  const filteredRuns = runs.filter(run => {
-    if (selectedAreas.size === 0) return true; // Show all runs if no areas selected
-    const subArea = subAreas.find(sa => sa.id === run.subAreaId);
-    return subArea && selectedAreas.has(subArea.areaId);
-  });
+  const filteredRuns = useMemo(() => {
+    return runs.filter(run => {
+      if (selectedAreas.size === 0) return true; // Show all runs if no areas selected
+      const subArea = subAreas.find(sa => sa.id === run.subAreaId);
+      return subArea && selectedAreas.has(subArea.areaId);
+    });
+  }, [runs, selectedAreas, subAreas]);
 
   // Area selection handlers
   const handleAreaToggle = (areaId: string) => {
@@ -181,12 +184,19 @@ export default function Dashboard() {
     setShowRunDetailModal(true);
   };
 
+  // Memoized onClose function to prevent map re-renders
+  const handleMapClose = useCallback(() => {
+    setShowMap(false);
+    setSelectedAreaForMap(null);
+    setSelectedSubAreaForMap(null);
+  }, []);
+
 
   // Run click handler removed - GPX tracks are no longer clickable
 
-  const handleStatusCommentChange = (runId: string, comment: string) => {
+  const handleStatusCommentChange = useCallback((runId: string, comment: string) => {
     setStatusCommentInputs(prev => ({ ...prev, [runId]: comment }));
-  };
+  }, []);
 
   const handleAvalancheRiskAssessment = (assessment: {
     strategicMindset: string;
@@ -257,8 +267,8 @@ export default function Dashboard() {
       });
     },
     onSettled: () => {
-      // Always refetch after error or success to ensure we have the latest data
-      queryClient.invalidateQueries({ queryKey: ["/api/runs"] });
+      // No need to refetch since we're using optimistic updates
+      // The optimistic update already reflects the latest state
     },
     onSuccess: () => {
       // Silent success for instant updates - no toast needed
@@ -288,27 +298,29 @@ export default function Dashboard() {
     // Call the mutation with optimistic updates
     updateRunStatusMutation.mutate({ runId, status, statusComment: updateData.statusComment });
     
-    // If changing to conditional, focus the input after a short delay
+    // If changing to conditional, trigger the autocomplete to open
     if (status === 'conditional') {
+      setAutoOpenComment(runId);
+      // Clear the auto-open after a short delay
       setTimeout(() => {
-        const input = document.querySelector(`input[data-run-id="${runId}"]`) as HTMLInputElement;
-        if (input) {
-          input.focus();
-          input.select();
-        }
+        setAutoOpenComment(null);
       }, 100);
     }
   };
 
-  const saveComment = (runId: string) => {
-    const comment = statusCommentInputs[runId] || '';
-    console.log('Saving comment for run:', runId, 'comment:', comment);
-    // Always save the comment, even if empty (to clear it)
+  const saveComment = useCallback((runId: string) => {
+    // Get the current comment value directly from state
+    setStatusCommentInputs(current => {
+      const comment = current[runId] || '';
+      console.log('Saving comment for run:', runId, 'comment:', comment);
+      // Always save the comment, even if empty (to clear it)
       updateRunStatusMutation.mutate({ runId, status: 'conditional', statusComment: comment });
-  };
+      return current; // Return unchanged state
+    });
+  }, [updateRunStatusMutation]);
 
   // Auto-save comment with debouncing - completely seamless
-  const autoSaveComment = (runId: string) => {
+  const autoSaveComment = useCallback((runId: string) => {
     // Clear any existing timeout for this run
     if (updateTimeoutsRef.current[runId]) {
       clearTimeout(updateTimeoutsRef.current[runId]);
@@ -316,16 +328,20 @@ export default function Dashboard() {
     
     // Set a new timeout for auto-save
     updateTimeoutsRef.current[runId] = setTimeout(() => {
-      const comment = statusCommentInputs[runId] || '';
+      // Get the current comment value directly from state
+      setStatusCommentInputs(current => {
+        const comment = current[runId] || '';
         console.log('Auto-saving comment for run:', runId, 'comment:', comment);
-      // Save seamlessly without any visual indicators (including empty comments)
+        // Save seamlessly without any visual indicators (including empty comments)
         updateRunStatusMutation.mutate({ 
           runId, 
           status: 'conditional', 
           statusComment: comment 
         });
+        return current; // Return unchanged state
+      });
     }, 300); // Very fast auto-save for seamless experience
-  };
+  }, [updateRunStatusMutation]);
   // Sync CalTopo comments function
   const syncCalTopoComments = async (runs: typeof filteredRuns) => {
     try {
@@ -891,21 +907,17 @@ export default function Dashboard() {
                                         </div>
                                         {run.status === "conditional" && (
                                           <div className="mt-2" onClick={(e) => e.stopPropagation()}>
-                                            <Input
-                                              data-run-id={run.id}
-                                              placeholder="Enter status comment..."
+                                            <StatusCommentAutocomplete
+                                              runId={run.id}
                                               value={statusCommentInputs[run.id] !== undefined ? statusCommentInputs[run.id] : (run.statusComment || "")}
-                                              onChange={(e) => {
-                                                handleStatusCommentChange(run.id, e.target.value);
+                                              onChange={(value) => {
+                                                handleStatusCommentChange(run.id, value);
                                                 autoSaveComment(run.id); // Trigger auto-save on change
                                               }}
                                               onBlur={() => saveComment(run.id)}
-                                              onKeyDown={(e) => {
-                                                if (e.key === 'Enter') {
-                                                  e.currentTarget.blur(); // This will trigger onBlur and save
-                                                }
-                                              }}
+                                              placeholder="Enter status comment..."
                                               className="w-full"
+                                              autoOpen={autoOpenComment === run.id}
                                             />
                                           </div>
                                         )}
@@ -1003,11 +1015,7 @@ export default function Dashboard() {
                     hoveredRunId={hoveredRunId ?? undefined}
                     showAvalanchePaths={showAvalanchePaths}
                     showOperations={showOperations}
-                    onClose={() => {
-                      setShowMap(false);
-                      setSelectedAreaForMap(null);
-                      setSelectedSubAreaForMap(null);
-                    }}
+                    onClose={handleMapClose}
                   />
                 ) : (
                   <div className="h-full w-full flex items-center justify-center bg-muted/20">
@@ -1156,4 +1164,6 @@ export default function Dashboard() {
       />
     </div>
   );
-}
+});
+
+export default Dashboard;
