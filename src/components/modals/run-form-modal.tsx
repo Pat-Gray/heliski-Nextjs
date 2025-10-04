@@ -198,6 +198,24 @@ export default function RunFormModal({ preselectedSubAreaId }: RunFormModalProps
             // Don't show error toast - it's not critical for run creation
           }
         }
+        
+        // Sync any uploaded images back to CalTopo
+        if (additionalPhotos.length > 0) {
+          try {
+            const syncImagesResponse = await fetch('/api/caltopo/sync-images-to-caltopo', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ runId: newRun.id })
+            });
+            
+            if (syncImagesResponse.ok) {
+              const syncImagesResult = await syncImagesResponse.json();
+              console.log('✅ Images synced to CalTopo:', syncImagesResult);
+            }
+          } catch (syncImagesError) {
+            console.error('❌ Error syncing images to CalTopo:', syncImagesError);
+          }
+        }
       } catch {
         toast({ 
           title: "Warning", 
@@ -686,9 +704,9 @@ export default function RunFormModal({ preselectedSubAreaId }: RunFormModalProps
               )}
             </div>
 
-            {/* Additional Photos */}
+            {/* CalTopo Photos */}
             <div className="space-y-2">
-              <label className="text-sm font-medium">Additional Photos</label>
+              <label className="text-sm font-medium">CalTopo Photos</label>
               <FileUpload
                 runId={tempRunId}
                 fileType="image"

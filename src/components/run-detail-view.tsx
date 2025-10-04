@@ -162,7 +162,7 @@ export default function RunDetailView({ runId }: RunDetailViewProps) {
     // Add avalanche photo
     if (run.avalanchePhoto) images.push(run.avalanchePhoto);
     
-    // Add additional photos - all are now simple string URLs
+    // Add CalTopo photos - all are now simple string URLs
     if (run.additionalPhotos) {
       run.additionalPhotos.forEach(photo => {
         if (typeof photo === 'string') {
@@ -578,12 +578,12 @@ export default function RunDetailView({ runId }: RunDetailViewProps) {
                       </div>
                     </div>
 
-                    {/* Additional Photos Gallery - UPDATED */}
+                    {/* CalTopo Photos Gallery - UPDATED */}
                     <div className="flex-1">
                       <div className="flex items-center justify-between mb-2">
                         <div className="flex items-center space-x-1 text-sm text-gray-600">
                           <Mountain className="h-4 w-4" />
-                          <span className="font-medium">Additional Photos ({selectedRun.additionalPhotos?.length || 0})</span>
+                          <span className="font-medium">CalTopo Photos ({selectedRun.additionalPhotos?.length || 0})</span>
                         </div>
                         <div className="flex items-center gap-1">
                           <Button
@@ -618,6 +618,26 @@ export default function RunDetailView({ runId }: RunDetailViewProps) {
                                       });
                                       if (updateResponse.ok) {
                                         queryClient.invalidateQueries({ queryKey: ['/api/runs'] });
+                                        
+                                        // Sync images to CalTopo if run is linked
+                                        if (selectedRun.caltopoMapId && selectedRun.caltopoFeatureId) {
+                                          try {
+                                            const syncResponse = await fetch('/api/caltopo/sync-images-to-caltopo', {
+                                              method: 'POST',
+                                              headers: { 'Content-Type': 'application/json' },
+                                              body: JSON.stringify({ runId: selectedRun.id })
+                                            });
+                                            
+                                            if (syncResponse.ok) {
+                                              const syncResult = await syncResponse.json();
+                                              console.log('✅ Images synced to CalTopo:', syncResult);
+                                            } else {
+                                              console.error('❌ Failed to sync images to CalTopo');
+                                            }
+                                          } catch (syncError) {
+                                            console.error('❌ Error syncing images to CalTopo:', syncError);
+                                          }
+                                        }
                                       }
                                     }
                                   } catch (error) {
@@ -665,6 +685,26 @@ export default function RunDetailView({ runId }: RunDetailViewProps) {
                                       });
                                       if (response.ok) {
                                         queryClient.invalidateQueries({ queryKey: ['/api/runs'] });
+                                        
+                                        // Sync images to CalTopo if run is linked
+                                        if (selectedRun.caltopoMapId && selectedRun.caltopoFeatureId) {
+                                          try {
+                                            const syncResponse = await fetch('/api/caltopo/sync-images-to-caltopo', {
+                                              method: 'POST',
+                                              headers: { 'Content-Type': 'application/json' },
+                                              body: JSON.stringify({ runId: selectedRun.id })
+                                            });
+                                            
+                                            if (syncResponse.ok) {
+                                              const syncResult = await syncResponse.json();
+                                              console.log('✅ Images synced to CalTopo:', syncResult);
+                                            } else {
+                                              console.error('❌ Failed to sync images to CalTopo');
+                                            }
+                                          } catch (syncError) {
+                                            console.error('❌ Error syncing images to CalTopo:', syncError);
+                                          }
+                                        }
                                       }
                                     } catch (error) {
                                       console.error('Failed to remove photo:', error);
@@ -678,7 +718,7 @@ export default function RunDetailView({ runId }: RunDetailViewProps) {
                           })
                         ) : (
                           <div className="h-20 border rounded bg-gray-100 flex items-center justify-center text-gray-400 text-xs">
-                            No additional photos
+                            No CalTopo photos
                           </div>
                         )}
                       </div>
