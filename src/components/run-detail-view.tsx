@@ -13,7 +13,7 @@ import { Mountain, AlertTriangle, MapPin, Edit2, Save, X, Eye, Plus, Upload } fr
 import Image from 'next/image';
 import type { Run, SubArea } from '@/lib/schemas/schema';
 import GpxUpdateButton from './gpx-update-button';
-import GPXViewer from './gpx-viewer';
+
 
 interface RunDetailViewProps {
   runId: string | null;
@@ -287,8 +287,9 @@ export default function RunDetailView({ runId }: RunDetailViewProps) {
       </div>
 
       {/* Main Content */}
-      <div className="flex-1 overflow-hidden">
-        {showMap && selectedRun.gpxPath ? (
+        
+          <div className="flex-1 overflow-hidden">
+        {showMap ? (
           <div className="h-full">
             <NZTopoMap
               areaId={selectedRun.subAreaId ?? ''}
@@ -296,12 +297,13 @@ export default function RunDetailView({ runId }: RunDetailViewProps) {
               selectedRunId={selectedRun.id ?? ''}
             />
           </div>
-        ) : showMap && (selectedRun.caltopoMapId && selectedRun.caltopoFeatureId) ? (
-          <div className="h-full">
-            <GPXViewer runId={selectedRun.id} className="h-full" />
-          </div>
         ) : (
           <div className="h-full overflow-y-auto p-4 space-y-4">
+            {/* Run Description and Notes - Two Columns */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+            </div>
+            
+
 
             {/* Run Description and Notes - Two Columns */}
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
@@ -660,13 +662,14 @@ export default function RunDetailView({ runId }: RunDetailViewProps) {
                             
                             return (
                               <div key={index} className="relative group">
-                                <div className="h-20 border rounded overflow-hidden">
+                                <div className="h-[200px] border rounded overflow-hidden">
                                   <Image
                                     src={imageUrl}
                                     alt={imageTitle}
                                     width={200}
-                                    height={80}
-                                    className="w-full h-full object-cover cursor-pointer hover:opacity-90 transition-opacity"
+                                    height={200}
+                                    className="w-full h-full object-cover
+                                    cursor-pointer hover:opacity-90 transition-opacity"
                                     onClick={() => handleImageClick(imageUrl)}
                                   />
                                 </div>

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { caltopoRequest, caltopoRequestBinary } from '../../../../utils/caltopo';
 import { supabaseAdmin } from '../../../../lib/supabase';
 import { supabase } from '../../../../lib/supabase-db';
+import { deleteGPX } from '../../../../lib/supabase-storage';
 
 interface CalTopoFeature {
   id: string;
@@ -44,6 +45,8 @@ interface CalTopoMapResponse {
 
 interface SyncStats {
   features: { total: number; new: number; updated: number; unchanged: number };
+  markers: { total: number; new: number; updated: number; unchanged: number };
+  points: { total: number; new: number; updated: number; unchanged: number };
   images: { total: number; new: number; updated: number; downloaded: number; skipped: number };
   folders: { total: number; new: number; updated: number; unchanged: number };
   errors: string[];
@@ -131,10 +134,15 @@ export async function POST(request: NextRequest) {
     // Initialize stats
     const stats: SyncStats = {
       features: { total: 0, new: 0, updated: 0, unchanged: 0 },
+      markers: { total: 0, new: 0, updated: 0, unchanged: 0 },
+      points: { total: 0, new: 0, updated: 0, unchanged: 0 },
       images: { total: 0, new: 0, updated: 0, downloaded: 0, skipped: 0 },
       folders: { total: 0, new: 0, updated: 0, unchanged: 0 },
       errors: []
     };
+
+    // Track downloaded images by feature to prevent duplicates
+    const downloadedImagesByFeature: Record<string, string[]> = {};
 
     // Upsert map record
     const { error: mapError } = await supabase
@@ -222,6 +230,16 @@ export async function POST(request: NextRequest) {
     );
     stats.features.total = features.length;
 
+    // Separate markers and points for detailed tracking
+    const markers = features.filter(f => f.properties.class === 'Marker');
+    const points = features.filter(f => f.properties.class === 'Shape' && f.geometry?.type === 'Point');
+    const otherFeatures = features.filter(f => f.properties.class === 'Shape' && f.geometry?.type !== 'Point');
+    
+    stats.markers.total = markers.length;
+    stats.points.total = points.length;
+    
+    console.log(`📍 Found ${markers.length} markers, ${points.length} points, ${otherFeatures.length} other features`);
+
     for (const feature of features) {
       try {
         // Check if feature exists and get current data
@@ -248,7 +266,16 @@ export async function POST(request: NextRequest) {
           visible: feature.properties.visible ?? true,
           creator: feature.properties.creator || feature.properties['-created-by'],
           caltopo_created_at: feature.properties.created ? new Date(feature.properties.created) : null,
-          caltopo_updated_at: feature.properties.updated ? new Date(feature.properties.updated) : null
+          caltopo_updated_at: feature.properties.updated ? new Date(feature.properties.updated) : null,
+          // Marker-specific fields
+          marker_symbol: feature.properties['marker-symbol'],
+          marker_color: feature.properties['marker-color'],
+          marker_size: feature.properties['marker-size'],
+          marker_rotation: feature.properties['marker-rotation'],
+          heading: feature.properties.heading,
+          icon: feature.properties.icon,
+          label: feature.properties.label,
+          label_visible: feature.properties.labelVisible ?? true
         };
 
         // Check if feature has changed
@@ -273,12 +300,73 @@ export async function POST(request: NextRequest) {
           } else {
             if (existingFeature) {
               stats.features.updated++;
+              
+        // If geometry changed, regenerate GPX cache
+if (existingFeature.geometry_type !== featureData.geometry_type ||
+  existingFeature.coordinates !== featureData.coordinates) {
+try {
+  await deleteGPX(mapId, feature.id);
+  console.log(`🗑️ Invalidated GPX cache for feature ${feature.id} (geometry changed)`);
+  
+  // Regenerate GPX for linked runs
+  const { data: linkedRuns } = await supabase
+    .from('runs')
+    .select('id')
+    .eq('caltopo_map_id', mapId)
+    .eq('caltopo_feature_id', feature.id);
+  
+  if (linkedRuns && linkedRuns.length > 0) {
+    for (const run of linkedRuns) {
+      try {
+        // Trigger GPX cache regeneration
+        const cacheResponse = await fetch(`${process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000'}/api/caltopo/cache-gpx`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            mapId,
+            featureId: feature.id,
+            runId: run.id
+          })
+        });
+        
+        if (cacheResponse.ok) {
+          console.log(`✅ Regenerated GPX for run ${run.id}`);
+        }
+      } catch (error) {
+        console.error(`Failed to regenerate GPX for run ${run.id}:`, error);
+      }
+    }
+  }
+} catch (error) {
+  console.error(`Failed to invalidate GPX for feature ${feature.id}:`, error);
+  stats.errors.push(`Failed to invalidate GPX for feature ${feature.id}: ${error instanceof Error ? error.message : 'Unknown error'}`);
+}
+}
+              
+              // Track markers and points separately
+              if (feature.properties.class === 'Marker') {
+                stats.markers.updated++;
+              } else if (feature.geometry?.type === 'Point') {
+                stats.points.updated++;
+              }
             } else {
               stats.features.new++;
+              // Track markers and points separately
+              if (feature.properties.class === 'Marker') {
+                stats.markers.new++;
+              } else if (feature.geometry?.type === 'Point') {
+                stats.points.new++;
+              }
             }
           }
         } else {
           stats.features.unchanged++;
+          // Track markers and points separately
+          if (feature.properties.class === 'Marker') {
+            stats.markers.unchanged++;
+          } else if (feature.geometry?.type === 'Point') {
+            stats.points.unchanged++;
+          }
         }
       } catch (error) {
         stats.errors.push(`Error processing feature ${feature.id}: ${error instanceof Error ? error.message : 'Unknown error'}`);
@@ -292,8 +380,32 @@ export async function POST(request: NextRequest) {
 
     for (const image of images) {
       try {
-        // Extract feature ID from parentId (format: "Shape:feature-id")
-        const featureId = image.properties.parentId?.replace('Shape:', '') || null;
+        // Extract feature ID from parentId (handles multiple formats)
+        let featureId = null;
+        const parentId = image.properties.parentId;
+        
+        if (parentId) {
+          // Handle different parentId formats:
+          // - "Shape:feature-id" (for polygons/lines)
+          // - "Marker:feature-id" (for markers/points)
+          // - "feature-id" (direct reference)
+          if (parentId.startsWith('Shape:')) {
+            featureId = parentId.replace('Shape:', '');
+          } else if (parentId.startsWith('Marker:')) {
+            featureId = parentId.replace('Marker:', '');
+          } else if (parentId.includes(':')) {
+            // Handle other formats like "Point:feature-id"
+            featureId = parentId.split(':')[1];
+          } else {
+            // Direct feature ID reference
+            featureId = parentId;
+          }
+        }
+        
+        console.log(`📸 Processing image: ${image.properties.title} (${image.id})`);
+        console.log(`📸   Backend Media ID: ${image.properties.backendMediaId}`);
+        console.log(`📸   Parent ID: ${parentId}`);
+        console.log(`📸   Extracted Feature ID: ${featureId}`);
 
         // Check if image exists and get current data
         const { data: existingImage } = await supabase
@@ -461,6 +573,12 @@ export async function POST(request: NextRequest) {
             console.log(`⬇️   Image download completed successfully`);
             stats.images.downloaded++;
 
+            // Track downloaded image by feature
+            if (!downloadedImagesByFeature[image.feature_id]) {
+              downloadedImagesByFeature[image.feature_id] = [];
+            }
+            downloadedImagesByFeature[image.feature_id].push(urlData.publicUrl);
+
           } catch (error) {
             // Update status to failed
             await supabase
@@ -473,6 +591,60 @@ export async function POST(request: NextRequest) {
         }
       }
     }
+    // Update linked runs with NEW photos only
+    if (Object.keys(downloadedImagesByFeature).length > 0) {
+      console.log('🔄 Updating linked runs with new photos...');
+      
+      // Get all runs linked to this map
+      const { data: linkedRuns, error: runsError } = await supabase
+        .from('runs')
+        .select('id, caltopo_feature_id, additional_photos')
+        .eq('caltopo_map_id', mapId)
+        .not('caltopo_feature_id', 'is', null);
+
+      if (runsError) {
+        stats.errors.push(`Failed to fetch linked runs: ${runsError.message}`);
+      } else if (linkedRuns && linkedRuns.length > 0) {
+        console.log(`📸 Found ${linkedRuns.length} runs linked to this map`);
+        
+        for (const run of linkedRuns) {
+          if (!run.caltopo_feature_id) continue;
+          
+          // Only update if this feature had new images downloaded
+          const newImageUrls = downloadedImagesByFeature[run.caltopo_feature_id];
+          if (!newImageUrls || newImageUrls.length === 0) continue;
+          
+          try {
+            // Get existing photos (handle both array and null)
+            const existingPhotos = Array.isArray(run.additional_photos) ? run.additional_photos : [];
+            
+            // Only add URLs that aren't already in the run
+            const trulyNewUrls = newImageUrls.filter(url => !existingPhotos.includes(url));
+
+            if (trulyNewUrls.length > 0) {
+              // Update run with new photos
+              const updatedPhotos = [...existingPhotos, ...trulyNewUrls];
+              
+              const { error: updateError } = await supabase
+                .from('runs')
+                .update({ additional_photos: updatedPhotos })
+                .eq('id', run.id);
+
+              if (updateError) {
+                console.error(`Failed to update photos for run ${run.id}:`, updateError);
+                stats.errors.push(`Failed to update photos for run ${run.id}: ${updateError.message}`);
+              } else {
+                console.log(`✅ Updated run ${run.id} with ${trulyNewUrls.length} new photos`);
+              }
+            }
+          } catch (error) {
+            console.error(`Error updating photos for run ${run.id}:`, error);
+            stats.errors.push(`Error updating photos for run ${run.id}: ${error instanceof Error ? error.message : 'Unknown error'}`);
+          }
+        }
+      }
+    }
+
 
     // Update sync log
     const duration = Date.now() - startTime;
@@ -483,6 +655,8 @@ export async function POST(request: NextRequest) {
         completed_at: new Date().toISOString(),
         duration_seconds: Math.round(duration / 1000),
         features_synced: stats.features.new + stats.features.updated,
+        markers_synced: stats.markers.new + stats.markers.updated,
+        points_synced: stats.points.new + stats.points.updated,
         images_synced: stats.images.new + stats.images.updated,
         folders_synced: stats.folders.new + stats.folders.updated,
         images_downloaded: stats.images.downloaded,
@@ -506,12 +680,16 @@ export async function POST(request: NextRequest) {
       message: `Incremental sync completed for map ${mapId}`,
       stats: {
         features: stats.features,
+        markers: stats.markers,
+        points: stats.points,
         images: stats.images,
         folders: stats.folders,
         errors: stats.errors.length,
         duration: Math.round(duration / 1000),
         efficiency: {
           featuresEfficiency: `${Math.round((stats.features.unchanged / stats.features.total) * 100)}% unchanged`,
+          markersEfficiency: `${Math.round((stats.markers.unchanged / stats.markers.total) * 100)}% unchanged`,
+          pointsEfficiency: `${Math.round((stats.points.unchanged / stats.points.total) * 100)}% unchanged`,
           imagesEfficiency: `${Math.round((stats.images.skipped / stats.images.total) * 100)}% skipped`,
           foldersEfficiency: `${Math.round((stats.folders.unchanged / stats.folders.total) * 100)}% unchanged`
         }

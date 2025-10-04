@@ -325,6 +325,87 @@ export default function Dashboard() {
         });
     }, 300); // Very fast auto-save for seamless experience
   };
+  // Sync CalTopo comments function
+  const syncCalTopoComments = async (runs: typeof filteredRuns) => {
+    try {
+      console.log('💬 Syncing CalTopo comments...');
+      
+      const currentDate = new Date().toISOString().split('T')[0];
+      const commentPromises = runs.map(async (run) => {
+        try {
+          // Format status comment based on run status
+          let statusCommentHeader;
+          
+          if (run.status === 'conditional' && run.statusComment && run.statusComment.trim()) {
+            statusCommentHeader = `--- Status Updated: ${currentDate} ---\n${run.statusComment.trim()}\n---`;
+          } else if (run.status === 'open' || run.status === 'closed') {
+            // For open and closed, only show status and date
+            statusCommentHeader = `--- Status Updated: ${currentDate} ---`;
+          } else {
+            statusCommentHeader = `--- Status Updated: ${currentDate} ---`;
+          }
+          
+          // Get current CalTopo comments
+          let currentCalTopoComments = run.runNotes || '';
+          
+          // Clean existing status comments - comprehensive approach
+          let cleanedNotes = currentCalTopoComments;
+          
+          // Remove all status comment blocks completely
+          // This regex matches from "--- Status Updated:" to the end of the string
+          cleanedNotes = cleanedNotes.replace(/--- Status Updated:[\s\S]*$/g, '');
+          
+          // Clean up any remaining whitespace and newlines
+          cleanedNotes = cleanedNotes
+            .replace(/^\s*\n+|\n+\s*$/g, '')
+            .replace(/\n{3,}/g, '\n\n')
+            .trim();
+          
+          const updatedNotes = `${statusCommentHeader}\n\n${cleanedNotes}`;
+          
+          // Update CalTopo comments
+          const syncResponse = await fetch('/api/caltopo/update-feature-comments', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              mapId: run.caltopoMapId,
+              featureId: run.caltopoFeatureId,
+              comments: updatedNotes
+            })
+          });
+          
+          if (syncResponse.ok) {
+            // Update local database
+            await fetch(`/api/runs/${run.id}`, {
+              method: 'PATCH',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ runNotes: updatedNotes })
+            });
+            
+            console.log(`✅ Updated comments for run ${run.name}`);
+            return { success: true, runId: run.id };
+          } else {
+            throw new Error(`HTTP ${syncResponse.status}`);
+          }
+        } catch (error) {
+          console.error(`❌ Failed to sync comments for run ${run.name}:`, error);
+          return { success: false, runId: run.id, error: error instanceof Error ? error.message : 'Unknown error' };
+        }
+      });
+      
+      const results = await Promise.all(commentPromises);
+      const successful = results.filter(r => r.success).length;
+      const failed = results.filter(r => !r.success).length;
+      
+      console.log(`💬 Comment sync completed: ${successful} successful, ${failed} failed`);
+      return { successful, failed, results };
+      
+    } catch (error) {
+      console.error('❌ CalTopo comment sync failed:', error);
+      throw error;
+    }
+  };
+
   // Sync CalTopo styles function
   const syncCalTopoStyles = async () => {
     try {
@@ -346,38 +427,15 @@ export default function Dashboard() {
 
       const result = await response.json();
       
-      console.log('✅ CalTopo sync result:', result);
-      
       if (result.success) {
-        const { updated, skippedUnlinked, failed, mapsUpdated } = result;
-        
-        let message = `CalTopo sync completed: ${updated} runs updated`;
-        if (skippedUnlinked.length > 0) {
-          message += `, ${skippedUnlinked.length} runs skipped (not linked to CalTopo)`;
-        }
-        if (failed.length > 0) {
-          message += `, ${failed.length} runs failed to sync`;
-        }
-        if (mapsUpdated.length > 0) {
-          message += `, ${mapsUpdated.length} maps updated`;
-        }
-        
-        toast({
-          title: "CalTopo sync completed",
-          description: message,
-          variant: failed.length > 0 ? "destructive" : "default"
-        });
+        console.log(`🎨 Style sync completed: ${result.updated} updated, ${result.failed} failed`);
+        return result;
       } else {
         throw new Error(result.error || 'Unknown sync error');
       }
-    } catch (error: unknown) {
-      console.error('❌ CalTopo sync failed:', error);
-      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-      toast({
-        title: "CalTopo sync failed",
-        description: `Could not sync run statuses to CalTopo: ${errorMessage}`,
-        variant: "destructive"
-      });
+    } catch (error) {
+      console.error('❌ CalTopo style sync failed:', error);
+      throw error;
     }
   };
   
@@ -403,11 +461,13 @@ export default function Dashboard() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/daily-plans"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/runs"] }); // Refresh runs data
       toast({ 
         title: "Daily plan submitted successfully", 
         description: "All current run statuses and comments have been saved as a structured snapshot."
       });
-      // Set print data and trigger print
+      
+      // Set print data for daily plan
       const printData = {
         areas,
         subAreas,
@@ -418,26 +478,7 @@ export default function Dashboard() {
         orangeCount,
         redCount,
       };
-      
-      // Setting print data for daily plan
       setPrintData(printData);
-      
-      // // Single print attempt with proper timing
-      // setTimeout(() => {
-      //   console.log('🖨️ Triggering print...');
-      //   try {
-      //     triggerPrint();
-      //     console.log('✅ Print triggered successfully');
-      //   } catch (error) {
-      //     console.error('❌ Print trigger failed:', error);
-      //     // Fallback: try direct window.print()
-      //     console.log('🖨️ Fallback: trying window.print() directly...');
-      //     window.print();
-      //   }
-      // }, 500); // Single delay to ensure print data is set
-
-      // Sync CalTopo styles after successful daily plan submission
-      syncCalTopoStyles();
     },
   });
   
@@ -555,166 +596,38 @@ export default function Dashboard() {
     const normalizedDate = new Date();
     normalizedDate.setHours(0, 0, 0, 0);
     
-    // Update CalTopo comments for ALL runs with CalTopo integration (regardless of status comment)
+    // Update CalTopo comments and styles for ALL runs with CalTopo integration
     const runsToSync = filteredRuns.filter(run => run.caltopoMapId && run.caltopoFeatureId);
     
-    // Daily Plan Status Comment Sync - optimized with map data caching
-    
-    // Fetch CalTopo map data once for all runs to avoid duplicate API calls
-    const mapDataCache = new Map<string, { features?: Array<{ id: string; properties?: { description?: string } }> }>();
-    
-    const caltopoSyncPromises = runsToSync.map(async (run) => {
-        try {
-          const currentDate = new Date().toISOString().split('T')[0];
-          
-          // Format status comment based on run status
-          let statusCommentHeader;
-          
-          // All status types use the same format: --- Status Updated: date ---
-          // Only include status comment for conditional runs
-          if (run.status === 'conditional' && run.statusComment && run.statusComment.trim()) {
-            // Has status comment: Date + Comment
-            statusCommentHeader = `--- Status Updated: ${currentDate} ---\n${run.statusComment.trim()}\n---`;
-          } else {
-            // No status comment: Just the date
-            statusCommentHeader = `--- Status Updated: ${currentDate} ---`;
-          }
-          
-          // Get current CalTopo comments from cached map data or fetch if not cached
-          let currentCalTopoComments = '';
-          try {
-            let caltopoData = mapDataCache.get(run.caltopoMapId!);
-            
-            if (!caltopoData) {
-              const caltopoResponse = await fetch('/api/caltopo/fetch-map', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ mapId: run.caltopoMapId! })
-              });
-              
-              if (caltopoResponse.ok) {
-                const responseData = await caltopoResponse.json();
-                caltopoData = responseData;
-                mapDataCache.set(run.caltopoMapId!, responseData);
-              }
-            }
-            
-            if (caltopoData) {
-              const feature = caltopoData.features?.find((f: { id: string }) => f.id === run.caltopoFeatureId);
-              currentCalTopoComments = feature?.properties?.description || '';
-            }
-          } catch (error) {
-            console.error(`Failed to fetch CalTopo comments for ${run.name}:`, error);
-            // Fallback to local runNotes if CalTopo fetch fails
-            currentCalTopoComments = run.runNotes || '';
-          }
-          
-          // Remove ALL existing status comments/updates first, then add new one
-          // Use a more comprehensive approach to catch all variations
-          let cleanedNotes = currentCalTopoComments;
-          
-          // Step 1: Remove complete status comment blocks (with content between --- markers)
-          cleanedNotes = cleanedNotes.replace(/--- Status Updated:[\s\S]*?---/g, '');
-          
-          // Step 2: Remove any remaining status lines that don't have closing ---
-          cleanedNotes = cleanedNotes.replace(/--- Status Updated:[\s\S]*?(?=\n\n|\n---|$)/g, '');
-          
-          // Step 3: Remove any standalone status lines
-          cleanedNotes = cleanedNotes.replace(/^--- Status Updated.*$/gm, '');
-          
-          // Step 4: Remove any standalone "---" lines that might be left behind
-          cleanedNotes = cleanedNotes.replace(/^---\s*$/gm, '');
-          
-          // Step 5: Clean up whitespace and empty lines
-          const finalCleanedNotes = cleanedNotes
-            .replace(/^\s*\n+|\n+\s*$/g, '') // Remove leading/trailing empty lines
-            .replace(/\n{3,}/g, '\n\n') // Replace multiple newlines with double newlines
-            .trim();
-          
-          // Test the regex on a sample string to make sure it works
-          const testString = `--- Status Updated: Oct 3, 2025 ---\nSome comment\n---\n\n--- CalTopo Comments ---\nOriginal comments`;
-          let testCleaned = testString;
-          testCleaned = testCleaned.replace(/--- Status Updated:[\s\S]*?---/g, '');
-          testCleaned = testCleaned.replace(/--- Status Updated:[\s\S]*?(?=\n\n|\n---|$)/g, '');
-          testCleaned = testCleaned.replace(/^--- Status Updated.*$/gm, '');
-          testCleaned = testCleaned.replace(/^---\s*$/gm, '');
-          testCleaned = testCleaned.replace(/^\s*\n+|\n+\s*$/g, '').replace(/\n{3,}/g, '\n\n').trim();
-          
-          console.log(`🧹 Status comment replacement for ${run.name}:`, {
-            runStatus: run.status,
-            original: currentCalTopoComments.slice(0, 300) + '...',
-            cleaned: finalCleanedNotes.slice(0, 300) + '...',
-            newStatusHeader: statusCommentHeader,
-            testRegex: {
-              input: testString,
-              output: testCleaned,
-              working: testCleaned.includes('CalTopo Comments')
-            },
-            steps: {
-              step1: currentCalTopoComments.replace(/--- Status Updated:[\s\S]*?---/g, '').slice(0, 100) + '...',
-              step2: currentCalTopoComments.replace(/--- Status Updated:[\s\S]*?---/g, '').replace(/--- Status Updated:[\s\S]*?(?=\n\n|\n---|$)/g, '').slice(0, 100) + '...'
-            }
-          });
-          
-          const updatedNotes = `${statusCommentHeader}\n\n${finalCleanedNotes}`;
-          
-          // Sync to CalTopo and update local database
-          console.log(`🔄 Syncing status comment for run: ${run.name}`, {
-            mapId: run.caltopoMapId,
-            featureId: run.caltopoFeatureId,
-            statusComment: run.statusComment,
-            updatedNotes: updatedNotes.slice(0, 200) + '...'
-          });
-          
-          const syncResponse = await fetch('/api/caltopo/update-feature-comments', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              mapId: run.caltopoMapId,
-              featureId: run.caltopoFeatureId,
-              comments: updatedNotes
-            })
-          });
-          
-          if (syncResponse.ok) {
-            // Status comment synced successfully
-            
-            // Also update the local database with the new CalTopo content
-            try {
-              // Updating local database with CalTopo content
-              
-              const dbUpdateResponse = await fetch(`/api/runs/${run.id}`, {
-                method: 'PATCH',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ runNotes: updatedNotes })
-              });
-              
-              if (dbUpdateResponse.ok) {
-                // Local database updated successfully
-                // Invalidate the runs query to refresh the run detail view
-                queryClient.invalidateQueries({ queryKey: ['/api/runs'] });
-                // Query cache invalidated
-              } else {
-                const errorData = await dbUpdateResponse.json();
-                console.error(`❌ Failed to update local database for run: ${run.name}`, errorData);
-              }
-            } catch (dbError) {
-              console.error(`❌ Database update error for run: ${run.name}`, dbError);
-            }
-          } else {
-            const errorData = await syncResponse.json();
-            console.error(`❌ Failed to sync status comment for run: ${run.name}`, errorData);
-          }
-          
-        } catch (error) {
-          console.error(`❌ Error syncing status comment for run: ${run.name}`, error);
+    if (runsToSync.length > 0) {
+      console.log(`🔄 Syncing ${runsToSync.length} runs to CalTopo...`);
+      
+      // Sync CalTopo comments and styles in parallel (non-blocking)
+      const caltopoSyncPromises = [
+        // Sync status comments
+        syncCalTopoComments(runsToSync),
+        // Sync feature styles/colors
+        syncCalTopoStyles()
+      ];
+      
+      // Don't block daily plan creation - run in background
+      Promise.allSettled(caltopoSyncPromises).then((results) => {
+        const commentResult = results[0];
+        const styleResult = results[1];
+        
+        if (commentResult.status === 'fulfilled') {
+          console.log('✅ CalTopo comments synced successfully');
+        } else {
+          console.error('❌ CalTopo comments sync failed:', commentResult.reason);
+        }
+        
+        if (styleResult.status === 'fulfilled') {
+          console.log('✅ CalTopo styles synced successfully');
+        } else {
+          console.error('❌ CalTopo styles sync failed:', styleResult.reason);
         }
       });
-    
-    // Wait for all CalTopo syncs to complete (don't block the daily plan creation)
-    Promise.all(caltopoSyncPromises).catch(() => {
-      // Silently handle sync failures - not critical for daily plan creation
-    });
+    }
     
     submitDailyPlanMutation.mutate({
       planDate: normalizedDate,
@@ -1023,7 +936,10 @@ export default function Dashboard() {
                   <Button
                     variant={showAvalanchePaths ? "default" : "outline"}
                     size="sm"
-                    onClick={() => setShowAvalanchePaths(!showAvalanchePaths)}
+                    onClick={() => {
+                      console.log('🔄 Toggling avalanche paths:', !showAvalanchePaths);
+                      setShowAvalanchePaths(!showAvalanchePaths);
+                    }}
                     className="shadow-lg"
                   >
                     <Mountain className="w-4 h-4 mr-2" />

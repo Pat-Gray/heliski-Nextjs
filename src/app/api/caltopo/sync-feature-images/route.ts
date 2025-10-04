@@ -84,8 +84,10 @@ export async function POST(request: NextRequest) {
         
         // Try different parentId formats
         return parentId === `Shape:${featureId}` || 
+               parentId === `Marker:${featureId}` ||
                parentId === featureId ||
-               parentId.endsWith(featureId);
+               parentId.endsWith(featureId) ||
+               parentId.includes(`:${featureId}`);
       }
     );
 

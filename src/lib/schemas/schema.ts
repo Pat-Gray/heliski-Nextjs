@@ -29,7 +29,7 @@ export const runSchema = z.object({
   gpxPath: z.string().nullable().optional(),
   runPhoto: z.string().nullable().optional(),
   avalanchePhoto: z.string().nullable().optional(),
-  additionalPhotos: z.array(z.string()).default([]),
+  additionalPhotos: z.array(z.string()).nullable().default([]),
   // CalTopo integration fields
   caltopoMapId: z.string().nullable().optional(),
   caltopoFeatureId: z.string().nullable().optional(),
@@ -94,7 +94,7 @@ export const insertRunSchema = runSchema.omit({
   gpxPath: z.string().nullable().optional(),
   runPhoto: z.string().nullable().optional(),
   avalanchePhoto: z.string().nullable().optional(),
-  additionalPhotos: z.array(z.string()).optional().default([]),
+  additionalPhotos: z.array(z.string()).nullable().optional().transform(val => val || []),
   caltopoMapId: z.string().nullable().optional(),
   caltopoFeatureId: z.string().nullable().optional(),
   gpxUpdatedAt: z.date().nullable().optional(),

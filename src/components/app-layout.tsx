@@ -1,7 +1,7 @@
 "use client";
 
 import { usePathname } from "next/navigation";
-import { Mountain, LogOut, User, Shield, RefreshCw, Zap, Settings, CheckCircle } from "lucide-react";
+import { Mountain, LogOut, User, Shield, RefreshCw, Zap, CheckCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { useAuth } from "@/contexts/auth-context";
@@ -35,7 +35,12 @@ interface SetupStatus {
     initialSync: boolean;
   };
   mapId?: string;
-  lastSync?: any;
+  lastSync?: {
+    status: string;
+    started_at: string;
+    completed_at?: string;
+    duration_seconds?: number;
+  };
 }
 
 export function AppLayout({ children }: AppLayoutProps) {

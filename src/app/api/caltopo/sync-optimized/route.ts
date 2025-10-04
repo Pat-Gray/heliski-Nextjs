@@ -202,7 +202,16 @@ export async function POST(request: NextRequest) {
             visible: feature.properties.visible ?? true,
             creator: feature.properties.creator || feature.properties['-created-by'],
             caltopo_created_at: feature.properties.created ? new Date(feature.properties.created) : null,
-            caltopo_updated_at: feature.properties.updated ? new Date(feature.properties.updated) : null
+            caltopo_updated_at: feature.properties.updated ? new Date(feature.properties.updated) : null,
+            // Marker-specific fields
+            marker_symbol: feature.properties['marker-symbol'],
+            marker_color: feature.properties['marker-color'],
+            marker_size: feature.properties['marker-size'],
+            marker_rotation: feature.properties['marker-rotation'],
+            heading: feature.properties.heading,
+            icon: feature.properties.icon,
+            label: feature.properties.label,
+            label_visible: feature.properties.labelVisible ?? true
           }, {
             onConflict: 'map_id,feature_id'
           });
@@ -225,13 +234,32 @@ export async function POST(request: NextRequest) {
 
     for (const image of images) {
       try {
-        // Extract feature ID from parentId (format: "Shape:feature-id")
-        const featureId = image.properties.parentId?.replace('Shape:', '') || null;
+        // Extract feature ID from parentId (handles multiple formats)
+        let featureId = null;
+        const parentId = image.properties.parentId;
+        
+        if (parentId) {
+          // Handle different parentId formats:
+          // - "Shape:feature-id" (for polygons/lines)
+          // - "Marker:feature-id" (for markers/points)
+          // - "feature-id" (direct reference)
+          if (parentId.startsWith('Shape:')) {
+            featureId = parentId.replace('Shape:', '');
+          } else if (parentId.startsWith('Marker:')) {
+            featureId = parentId.replace('Marker:', '');
+          } else if (parentId.includes(':')) {
+            // Handle other formats like "Point:feature-id"
+            featureId = parentId.split(':')[1];
+          } else {
+            // Direct feature ID reference
+            featureId = parentId;
+          }
+        }
         
         console.log(`📸 Processing image: ${image.properties.title} (${image.id})`);
         console.log(`📸   Backend Media ID: ${image.properties.backendMediaId}`);
-        console.log(`📸   Parent ID: ${image.properties.parentId}`);
-        console.log(`📸   Feature ID: ${featureId}`);
+        console.log(`📸   Parent ID: ${parentId}`);
+        console.log(`📸   Extracted Feature ID: ${featureId}`);
 
         const { error } = await supabase
           .from('caltopo_images')

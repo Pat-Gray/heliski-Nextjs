@@ -2,67 +2,39 @@ import { NextRequest, NextResponse } from 'next/server';
 import { caltopoRequest } from '../../../../utils/caltopo';
 import { supabase } from '../../../../lib/supabase-db';
 
-interface CalTopoFeature {
-  id: string;
-  properties: {
-    stroke: string;
-    fill: string;
-    [key: string]: unknown;
-  };
-  [key: string]: unknown;
-}
-
-interface CalTopoMapState {
-  features: CalTopoFeature[];
-  [key: string]: unknown;
-}
-
-interface CalTopoMapResponse {
-  state: CalTopoMapState;
-  [key: string]: unknown;
-}
-
 interface SyncStylesRequest {
-  dailyPlanId?: string;
-  runIds?: string[];
+  runIds: string[];
 }
 
-interface SyncStylesResponse {
-  success: boolean;
-  updated: number;
-  skippedUnlinked: string[];
-  failed: Array<{ runId: string; reason: string }>;
-  mapsUpdated: string[];
-  error?: string;
+interface Run {
+  id: string;
+  name: string;
+  status: 'open' | 'conditional' | 'closed';
+  caltopo_map_id: string | null;
+  caltopo_feature_id: string | null;
 }
 
-// Color mapping
+// Status to CalTopo color mapping
 const STATUS_COLORS = {
-  open: '#22c55e',
-  conditional: '#f97316',
-  closed: '#ef4444'
-} as const;
+  open: '#00FF00',      // Green
+  conditional: '#FFA500', // Orange
+  closed: '#FF0000'     // Red
+};
+
+// Status to CalTopo stroke color mapping
+const STATUS_STROKE_COLORS = {
+  open: '#00CC00',      // Darker green
+  conditional: '#E69400', // Darker orange
+  closed: '#CC0000'     // Darker red
+};
 
 export async function POST(request: NextRequest) {
-  console.log('🎨 Sync Styles API - Request Started:', {
-    url: request.url,
-    timestamp: new Date().toISOString()
-  });
-
   try {
-    const body: SyncStylesRequest = await request.json();
-    const { dailyPlanId, runIds } = body;
+    const { runIds }: SyncStylesRequest = await request.json();
 
-    console.log('📝 Sync Styles Request:', {
-      dailyPlanId,
-      runIds: runIds ? runIds.map(id => id.substring(0, 8) + '...') : 'none',
-      hasDailyPlanId: !!dailyPlanId,
-      hasRunIds: !!runIds
-    });
-
-    if (!dailyPlanId && !runIds) {
+    if (!runIds || !Array.isArray(runIds) || runIds.length === 0) {
       return NextResponse.json(
-        { error: 'Missing required fields: dailyPlanId or runIds' },
+        { error: 'Missing or invalid runIds array' },
         { status: 400 }
       );
     }
@@ -71,109 +43,75 @@ export async function POST(request: NextRequest) {
     const credentialSecret = process.env.CALTOPO_CREDENTIAL_SECRET;
 
     if (!credentialId || !credentialSecret) {
-      console.error('❌ Missing CalTopo credentials');
       return NextResponse.json(
-        { error: 'Server configuration error: Missing CalTopo credentials' },
+        { error: 'Missing CalTopo credentials' },
         { status: 500 }
       );
     }
 
-    // Get runs to sync
-    let runsToSync: Array<{ id: string; status: string; caltopoMapId: string | null; caltopoFeatureId: string | null }> = [];
+    console.log(`🎨 Syncing styles for ${runIds.length} runs...`);
 
-    if (dailyPlanId) {
-      // Get runs from daily plan
-      const { data: dailyPlan, error: planError } = await supabase
-        .from('daily_plans')
-        .select('run_ids')
-        .eq('id', dailyPlanId)
-        .single();
-      
-      if (planError || !dailyPlan) {
-        return NextResponse.json(
-          { error: 'Daily plan not found' },
-          { status: 404 }
-        );
-      }
+    // Get run data from database
+    const { data: runs, error: runsError } = await supabase
+      .from('runs')
+      .select('id, name, status, caltopo_map_id, caltopo_feature_id')
+      .in('id', runIds);
 
-      const planRunIds = dailyPlan.run_ids;
-      const { data: runsData, error: runsError } = await supabase
-        .from('runs')
-        .select('id, status, caltopo_map_id, caltopo_feature_id')
-        .in('id', planRunIds);
-
-      if (runsError) {
-        throw new Error(`Failed to fetch runs: ${runsError.message}`);
-      }
-
-      runsToSync = runsData?.map(run => ({
-        id: run.id,
-        status: run.status,
-        caltopoMapId: run.caltopo_map_id,
-        caltopoFeatureId: run.caltopo_feature_id
-      })) || [];
-    } else if (runIds) {
-      // Get specific runs
-      const { data: runsData, error: runsError } = await supabase
-        .from('runs')
-        .select('id, status, caltopo_map_id, caltopo_feature_id')
-        .in('id', runIds);
-
-      if (runsError) {
-        throw new Error(`Failed to fetch runs: ${runsError.message}`);
-      }
-
-      runsToSync = runsData?.map(run => ({
-        id: run.id,
-        status: run.status,
-        caltopoMapId: run.caltopo_map_id,
-        caltopoFeatureId: run.caltopo_feature_id
-      })) || [];
+    if (runsError) {
+      return NextResponse.json(
+        { error: 'Failed to fetch run data' },
+        { status: 500 }
+      );
     }
 
-    console.log('📊 Runs to sync:', {
-      totalRuns: runsToSync.length,
-      linkedRuns: runsToSync.filter(r => r.caltopoMapId && r.caltopoFeatureId).length,
-      unlinkedRuns: runsToSync.filter(r => !r.caltopoMapId || !r.caltopoFeatureId).length
-    });
+    if (!runs || runs.length === 0) {
+      return NextResponse.json(
+        { error: 'No runs found' },
+        { status: 404 }
+      );
+    }
 
-    // Group runs by map
-    const runsByMap = new Map<string, Array<{ runId: string; featureId: string; status: string }>>();
-    const skippedUnlinked: string[] = [];
-    const failed: Array<{ runId: string; reason: string }> = [];
+    // Filter runs that are linked to CalTopo
+    const caltopoLinkedRuns = runs.filter((run: Run) => 
+      run.caltopo_map_id && run.caltopo_feature_id
+    );
 
-    for (const run of runsToSync) {
-      if (!run.caltopoMapId || !run.caltopoFeatureId) {
-        skippedUnlinked.push(run.id);
-        continue;
-      }
-
-      if (!runsByMap.has(run.caltopoMapId)) {
-        runsByMap.set(run.caltopoMapId, []);
-      }
-
-      runsByMap.get(run.caltopoMapId)!.push({
-        runId: run.id,
-        featureId: run.caltopoFeatureId,
-        status: run.status
+    if (caltopoLinkedRuns.length === 0) {
+      return NextResponse.json({
+        success: true,
+        message: 'No runs are linked to CalTopo',
+        updated: 0,
+        skippedUnlinked: runs.length,
+        failed: 0,
+        mapsUpdated: []
       });
     }
 
-    console.log('🗺️ Runs grouped by map:', {
-      mapCount: runsByMap.size,
-      maps: Array.from(runsByMap.keys()).map(mapId => ({
-        mapId: mapId.substring(0, 8) + '...',
-        runCount: runsByMap.get(mapId)!.length
-      }))
-    });
+    console.log(`🎨 Found ${caltopoLinkedRuns.length} runs linked to CalTopo`);
 
-    const mapsUpdated: string[] = [];
-    let totalUpdated = 0;
+    const results = {
+      updated: 0,
+      skippedUnlinked: runs.length - caltopoLinkedRuns.length,
+      failed: 0,
+      mapsUpdated: new Set<string>(),
+      errors: [] as string[]
+    };
+
+    // Group runs by map to minimize API calls
+    const runsByMap = new Map<string, Run[]>();
+    caltopoLinkedRuns.forEach((run: Run) => {
+      if (run.caltopo_map_id) {
+        if (!runsByMap.has(run.caltopo_map_id)) {
+          runsByMap.set(run.caltopo_map_id, []);
+        }
+        runsByMap.get(run.caltopo_map_id)!.push(run);
+      }
+    });
 
     // Process each map
     for (const [mapId, mapRuns] of runsByMap) {
       try {
-        console.log(`🔄 Processing map ${mapId.substring(0, 8)}... with ${mapRuns.length} runs`);
+        console.log(`🎨 Processing map ${mapId} with ${mapRuns.length} runs`);
 
         // Get current map data
         const mapData = await caltopoRequest(
@@ -181,148 +119,96 @@ export async function POST(request: NextRequest) {
           `/api/v1/map/${mapId}/since/0`,
           credentialId,
           credentialSecret
-        ) as CalTopoMapResponse;
+        );
 
-        console.log('📊 Map data received:', {
-          hasState: !!mapData.state,
-          hasFeatures: !!mapData.state?.features,
-          featuresCount: mapData.state?.features?.length || 0,
-          fullResponseKeys: Object.keys(mapData),
-          stateKeys: mapData.state ? Object.keys(mapData.state) : 'no state'
-        });
-
-        if (!mapData.state?.features) {
-          console.error('❌ No features found in map data');
-          failed.push(...mapRuns.map(r => ({ runId: r.runId, reason: 'No features found in map' })));
-          continue;
+        if (!mapData || !mapData.state?.features) {
+          throw new Error(`Failed to fetch map data for ${mapId}`);
         }
 
-        // Update feature styles
         let mapUpdated = false;
-        const updatedFeatures = mapData.state.features.map((feature: CalTopoFeature) => {
-          const runForFeature = mapRuns.find(r => r.featureId === feature.id);
-          
-          if (!runForFeature) {
-            return feature; // No changes needed
-          }
 
-          const newColor = STATUS_COLORS[runForFeature.status as keyof typeof STATUS_COLORS];
-          
-          if (!newColor) {
-            console.warn(`⚠️ Unknown status: ${runForFeature.status} for run ${runForFeature.runId}`);
-            return feature;
-          }
+        // Update each run's feature in the map
+        for (const run of mapRuns) {
+          try {
+            const feature = mapData.state.features.find(
+              (f: any) => f.id === run.caltopo_feature_id
+            );
 
-          // Update feature properties (CalTopo uses properties, not style)
-          const updatedFeature = {
-            ...feature,
-            properties: {
-              ...feature.properties,
-              stroke: newColor,
-              fill: newColor // For polygons
+            if (!feature) {
+              console.warn(`⚠️ Feature ${run.caltopo_feature_id} not found in map ${mapId}`);
+              results.failed++;
+              results.errors.push(`Feature ${run.caltopo_feature_id} not found for run ${run.name}`);
+              continue;
             }
-          };
 
-          console.log('🎨 Updated feature style:', {
-            featureId: feature.id,
-            runId: runForFeature.runId,
-            status: runForFeature.status,
-            color: newColor
-          });
+            // Update feature colors based on run status
+            const updatedFeature = {
+              ...feature,
+              properties: {
+                ...feature.properties,
+                fill: STATUS_COLORS[run.status],
+                stroke: STATUS_STROKE_COLORS[run.status],
+                'fill-opacity': 0.3,
+                'stroke-opacity': 1.0,
+                'stroke-width': 2,
+                // Add status information
+                heliRunStatus: run.status,
+                heliRunName: run.name,
+                lastStatusUpdate: new Date().toISOString()
+              }
+            };
 
-          mapUpdated = true;
-          return updatedFeature;
-        });
+            // Update the feature in CalTopo
+            await caltopoRequest(
+              'POST',
+              `/api/v1/map/${mapId}/Shape/${run.caltopo_feature_id}`,
+              credentialId,
+              credentialSecret,
+              updatedFeature
+            );
+
+            console.log(`✅ Updated style for run ${run.name} (${run.status})`);
+            results.updated++;
+            mapUpdated = true;
+
+          } catch (error) {
+            console.error(`❌ Failed to update run ${run.name}:`, error);
+            results.failed++;
+            results.errors.push(`Failed to update run ${run.name}: ${error instanceof Error ? error.message : 'Unknown error'}`);
+          }
+        }
 
         if (mapUpdated) {
-          // Update each feature individually using CalTopo API
-          console.log('💾 Updating features individually in CalTopo...');
-          
-          let featuresUpdated = 0;
-          for (const feature of updatedFeatures) {
-            const runForFeature = mapRuns.find(r => r.featureId === feature.id);
-            if (!runForFeature) continue;
-
-            try {
-              // Update individual feature using CalTopo API
-              await caltopoRequest(
-                'POST',
-                `/api/v1/map/${mapId}/Shape/${feature.id}`,
-                credentialId,
-                credentialSecret,
-                feature
-              );
-              
-              featuresUpdated++;
-              console.log(`✅ Updated feature ${feature.id} for run ${runForFeature.runId}`);
-            } catch (featureError: unknown) {
-              const errorMessage = featureError instanceof Error ? featureError.message : 'Unknown error';
-              console.error(`❌ Failed to update feature ${feature.id}:`, errorMessage);
-              failed.push({ 
-                runId: runForFeature.runId, 
-                reason: `Feature update failed: ${errorMessage}` 
-              });
-            }
-          }
-
-          if (featuresUpdated > 0) {
-            mapsUpdated.push(mapId);
-            totalUpdated += featuresUpdated;
-            console.log('✅ Map updated successfully:', {
-              mapId: mapId.substring(0, 8) + '...',
-              featuresUpdated,
-              totalRuns: mapRuns.length
-            });
-          }
-        } else {
-          console.log('ℹ️ No features needed updating for map:', mapId.substring(0, 8) + '...');
+          results.mapsUpdated.add(mapId);
         }
 
-      } catch (mapError: unknown) {
-        const errorMessage = mapError instanceof Error ? mapError.message : 'Unknown error';
-        console.error(`❌ Failed to update map ${mapId.substring(0, 8)}...:`, errorMessage);
-        failed.push(...mapRuns.map(r => ({ 
-          runId: r.runId, 
-          reason: `Map update failed: ${errorMessage}` 
-        })));
+      } catch (error) {
+        console.error(`❌ Failed to process map ${mapId}:`, error);
+        results.failed += mapRuns.length;
+        results.errors.push(`Failed to process map ${mapId}: ${error instanceof Error ? error.message : 'Unknown error'}`);
       }
     }
 
-    const response: SyncStylesResponse = {
-      success: true,
-      updated: totalUpdated,
-      skippedUnlinked,
-      failed,
-      mapsUpdated
-    };
-
-    console.log('✅ Sync Styles API Success:', {
-      updated: response.updated,
-      skipped: response.skippedUnlinked.length,
-      failed: response.failed.length,
-      mapsUpdated: response.mapsUpdated.length
-    });
-
-    return NextResponse.json(response);
-
-  } catch (error: unknown) {
-    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-    const errorStack = error instanceof Error ? error.stack : undefined;
-    const errorName = error instanceof Error ? error.name : 'Unknown';
-    
-    console.error('❌ Sync Styles API Error:', {
-      errorMessage,
-      errorStack,
-      errorName
-    });
+    console.log(`🎨 Style sync completed: ${results.updated} updated, ${results.failed} failed`);
 
     return NextResponse.json({
-      success: false,
-      error: errorMessage,
-      updated: 0,
-      skippedUnlinked: [],
-      failed: [],
-      mapsUpdated: []
-    }, { status: 500 });
+      success: true,
+      message: 'Style sync completed',
+      updated: results.updated,
+      skippedUnlinked: results.skippedUnlinked,
+      failed: results.failed,
+      mapsUpdated: Array.from(results.mapsUpdated),
+      errors: results.errors
+    });
+
+  } catch (error) {
+    console.error('Error syncing styles:', error);
+    return NextResponse.json(
+      { 
+        error: 'Failed to sync styles', 
+        details: error instanceof Error ? error.message : 'Unknown error' 
+      },
+      { status: 500 }
+    );
   }
 }

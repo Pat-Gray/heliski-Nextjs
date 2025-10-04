@@ -20,6 +20,13 @@ interface CalTopoMap {
   id: string;
   title: string;
   accountId: string;
+  lastSynced?: string;
+  totalFeatures?: number;
+  totalImages?: number;
+  totalFolders?: number;
+  totalMarkers?: number;
+  totalPoints?: number;
+  syncStatus?: string;
 }
 
 interface CalTopoFeature {
@@ -29,6 +36,16 @@ interface CalTopoFeature {
   properties: Record<string, unknown>;
   groupId?: string;
   hasImages?: boolean;
+  geometryType?: string;
+  class?: string;
+  markerSymbol?: string;
+  markerColor?: string;
+  markerSize?: string;
+  coordinates?: unknown;
+  visible?: boolean;
+  creator?: string;
+  created?: string;
+  updated?: string;
 }
 
 interface CalTopoGroup {
@@ -69,15 +86,11 @@ export default function RunFormModal({ preselectedSubAreaId }: RunFormModalProps
   // Generate a temporary ID for file uploads
   const [tempRunId] = useState(() => `temp-${Math.floor(123456)}`);
 
-  // Fetch available CalTopo maps
+  // Fetch available CalTopo maps from synced data
   const { data: caltopoMaps = [], isLoading: mapsLoading, error: mapsError } = useQuery<CalTopoMap[]>({
-    queryKey: ["/api/caltopo/maps"],
+    queryKey: ["/api/caltopo/data/maps"],
     queryFn: async () => {
-      const response = await fetch('/api/caltopo/fetch-account', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ teamId: '7QNDP0' }) // Your team ID
-      });
+      const response = await fetch('/api/caltopo/data/maps');
       
       if (!response.ok) {
         const errorText = await response.text();
@@ -89,32 +102,40 @@ export default function RunFormModal({ preselectedSubAreaId }: RunFormModalProps
     },
     enabled: true, // Always fetch maps since GPX must come from CalTopo
     retry: 1,
-    staleTime: 5 * 60 * 1000, // 5 minutes
+    staleTime: 2 * 60 * 1000, // 2 minutes - shorter since it's synced data
   });
   
 
-  // Fetch features and groups for selected map
+  // Fetch features and groups for selected map from synced data
   const { data: mapData, isLoading: featuresLoading } = useQuery<{
     gpxTracks: CalTopoFeature[];
     groups: CalTopoGroup[];
   }>({
-    queryKey: ["/api/caltopo/features", caltopoMapId],
+    queryKey: ["/api/caltopo/data/features", caltopoMapId],
     queryFn: async () => {
       if (!caltopoMapId) return { gpxTracks: [], groups: [] };
       
-      const response = await fetch('/api/caltopo/fetch-map', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ mapId: caltopoMapId })
-      });
-      if (!response.ok) throw new Error('Failed to fetch features');
-      const data = await response.json();
+      // Fetch features and groups in parallel
+      const [featuresResponse, groupsResponse] = await Promise.all([
+        fetch(`/api/caltopo/data/features?mapId=${caltopoMapId}&type=all`),
+        fetch(`/api/caltopo/data/groups?mapId=${caltopoMapId}`)
+      ]);
+      
+      if (!featuresResponse.ok) throw new Error('Failed to fetch features');
+      if (!groupsResponse.ok) throw new Error('Failed to fetch groups');
+      
+      const [featuresData, groupsData] = await Promise.all([
+        featuresResponse.json(),
+        groupsResponse.json()
+      ]);
+      
       return {
-        gpxTracks: data.gpxTracks || [],
-        groups: data.groups || []
+        gpxTracks: featuresData.features || [],
+        groups: groupsData.groups || []
       };
     },
-    enabled: !!caltopoMapId
+    enabled: !!caltopoMapId,
+    staleTime: 2 * 60 * 1000, // 2 minutes - shorter since it's synced data
   });
 
   const caltopoFeatures = mapData?.gpxTracks || [];
@@ -281,7 +302,7 @@ export default function RunFormModal({ preselectedSubAreaId }: RunFormModalProps
       subAreaId: preselectedSubAreaId,
       runPhoto: runPhoto || null,
       avalanchePhoto: avalanchePhoto || null,
-      additionalPhotos: additionalPhotos.length > 0 ? additionalPhotos : null,
+      additionalPhotos: additionalPhotos,
       caltopoMapId: caltopoMapId,
       caltopoFeatureId: caltopoFeatureId,
     });
@@ -544,7 +565,13 @@ export default function RunFormModal({ preselectedSubAreaId }: RunFormModalProps
                     ) : (
                       caltopoMaps.map((map) => (
                         <SelectItem key={map.id} value={map.id}>
-                          {map.title}
+                          <div className="flex flex-col">
+                            <span>{map.title}</span>
+                            <span className="text-xs text-muted-foreground">
+                              {map.totalFeatures || 0} features, {map.totalMarkers || 0} markers, {map.totalPoints || 0} points
+                              {map.lastSynced && ` • Synced ${new Date(map.lastSynced).toLocaleDateString()}`}
+                            </span>
+                          </div>
                         </SelectItem>
                       ))
                     )}
@@ -617,7 +644,18 @@ export default function RunFormModal({ preselectedSubAreaId }: RunFormModalProps
                       ) : (
                         filteredFeatures.map((feature) => (
                           <SelectItem key={feature.id} value={feature.id}>
-                            {feature.title} {feature.hasImages ? '📸 (Auto-sync)' : ''}
+                            <div className="flex flex-col">
+                              <span className="flex items-center gap-2">
+                                {feature.title}
+                                {feature.hasImages && <span className="text-xs">📸</span>}
+                                {feature.class === 'Marker' && <span className="text-xs">📍</span>}
+                                {feature.geometryType === 'Point' && <span className="text-xs">🔵</span>}
+                              </span>
+                              <span className="text-xs text-muted-foreground">
+                                {feature.geometryType} • {feature.pointCount} points
+                                {feature.markerSymbol && ` • ${feature.markerSymbol}`}
+                              </span>
+                            </div>
                           </SelectItem>
                         ))
                       )}
