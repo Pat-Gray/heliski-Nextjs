@@ -116,6 +116,7 @@ export default function NZTopoMap({
   onClose,
 }: NZTopoMapProps) {
   const mapRef = useRef<MapRef>(null);
+  const gpxCache = useRef<Record<string, FeatureCollection<LineString>>>({});
   const [viewState, setViewState] = useState({
     longitude: 174.0,
     latitude: -41.0,
@@ -135,7 +136,7 @@ export default function NZTopoMap({
   // Fetch ALL runs for the area (not filtered by subAreaId)
   const { data: runsData, isLoading, error: fetchError } = useRunsForArea(areaId);
 
-  // Process runs data and parse GPX files
+  // Process runs data with GPX caching and memoization
   useEffect(() => {
     if (!runsData || !Array.isArray(runsData)) return;
 
@@ -144,23 +145,36 @@ export default function NZTopoMap({
       setError(null);
 
       try {
-        const processedRuns: RunData[] = [];
+        // Process runs in parallel for better performance
+        const runPromises = runsData.map(async (run) => {
+          if (!run) return null;
 
-        for (const run of runsData) {
-          if (run) {
-            const gpxData = await parseGPXToGeoJSON(run.gpxPath || '', run.subAreaId, run.runNumber);
-            
-            processedRuns.push({
-              id: run.id || '',
-              name: run.name || '',
-              runNumber: run.runNumber || 0,
-              status: (run.status as 'open' | 'conditional' | 'closed') || 'open',
-              gpxPath: run.gpxPath || '',
-              subAreaId: run.subAreaId || '',
-              gpxData
-            });
+          const cacheKey = `${run.gpxPath || ''}-${run.subAreaId || ''}-${run.runNumber || 0}`;
+          
+          let gpxData: FeatureCollection<LineString>;
+          
+          // Check cache first
+          if (gpxCache.current[cacheKey]) {
+            gpxData = gpxCache.current[cacheKey];
+          } else {
+            // Fetch and cache GPX data
+            gpxData = await parseGPXToGeoJSON(run.gpxPath || '', run.subAreaId, run.runNumber);
+            gpxCache.current[cacheKey] = gpxData;
           }
-        }
+
+          return {
+            id: run.id || '',
+            name: run.name || '',
+            runNumber: run.runNumber || 0,
+            status: (run.status as 'open' | 'conditional' | 'closed') || 'open',
+            gpxPath: run.gpxPath || '',
+            subAreaId: run.subAreaId || '',
+            gpxData
+          } as RunData;
+        });
+
+        const results = await Promise.all(runPromises);
+        const processedRuns = results.filter((run): run is RunData => run !== null);
 
         setRuns(processedRuns);
         
@@ -188,6 +202,17 @@ export default function NZTopoMap({
     processRuns();
   }, [runsData, hasInitialized]);
 
+  // Cleanup GPX cache on unmount
+  useEffect(() => {
+    const cache = gpxCache.current;
+    return () => {
+      // Clear all cache entries
+      Object.keys(cache).forEach(key => {
+        delete cache[key];
+      });
+    };
+  }, []);
+
   // Handle sub-area zoom when subAreaId changes
   useEffect(() => {
     if (!subAreaId || !mapRef.current || runs.length === 0) return;
@@ -201,8 +226,8 @@ export default function NZTopoMap({
         ],
         {
           padding: 50,
-          maxZoom: 14,
-          duration: 1000
+          maxZoom: 13,
+          duration: 1
         }
       );
     }
@@ -363,12 +388,16 @@ export default function NZTopoMap({
               attribution="© LINZ CC BY 4.0"
               onError={handleNZTopoSourceError}
               onLoad={handleNZTopoSourceLoad}
+              minzoom={0}
+  maxzoom={18}
+  bounds={[166.0, -48.0, 180.0, -34.0]} // NZ bounds to limit tile requests
             >
               <Layer
                 id="nz-topo-layer"
                 type="raster"
                 paint={{
-                  'raster-opacity': 1
+                  'raster-opacity': 1,
+                  'raster-fade-duration': 0 
                 }}
               />
             </Source>
