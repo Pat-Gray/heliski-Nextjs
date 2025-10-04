@@ -53,21 +53,7 @@ function isCalTopoMapData(data: unknown): data is CalTopoMapData {
      (typeof data.state === 'object' && 
       data.state !== null && 
       ('features' in data.state ? 
-        Array.isArray(data.state.features) && 
-        data.state.features.every(f => 
-          typeof f === 'object' && 
-          f !== null && 
-          'type' in f && 
-          f.type === 'Feature' &&
-          'id' in f &&
-          'geometry' in f &&
-          typeof f.geometry === 'object' &&
-          f.geometry !== null &&
-          'type' in f.geometry &&
-          (f.geometry.type === 'LineString' || f.geometry.type === 'MultiLineString') &&
-          'coordinates' in f.geometry &&
-          Array.isArray(f.geometry.coordinates)
-        ) : true)))
+        Array.isArray(data.state.features) : true)))
   );
 }
 
@@ -174,8 +160,20 @@ export async function POST(request: NextRequest) {
         credentialSecret
       );
 
+      // Debug: Log the actual response structure
+      console.log('🔍 CalTopo API Response Structure:', {
+        hasState: 'state' in mapDataResponse,
+        stateType: typeof mapDataResponse.state,
+        hasFeatures: 'features' in (mapDataResponse as any).state,
+        featuresType: typeof (mapDataResponse as any).state?.features,
+        featuresLength: Array.isArray((mapDataResponse as any).state?.features) ? (mapDataResponse as any).state.features.length : 'not array',
+        topLevelKeys: Object.keys(mapDataResponse as any),
+        stateKeys: (mapDataResponse as any).state ? Object.keys((mapDataResponse as any).state) : 'no state'
+      });
+
       // Type guard to ensure we have valid map data
       if (!isCalTopoMapData(mapDataResponse)) {
+        console.log('❌ Map data validation failed. Response:', JSON.stringify(mapDataResponse, null, 2));
         throw new Error('Invalid map data structure received from CalTopo API');
       }
 
@@ -233,6 +231,7 @@ export async function POST(request: NextRequest) {
 
           // Type guard to ensure we have valid map data
           if (!isCalTopoMapData(mapDataResponse)) {
+            console.log('❌ Map data validation failed in fallback. Response:', JSON.stringify(mapDataResponse, null, 2));
             throw new Error('Invalid map data structure received from CalTopo API');
           }
 

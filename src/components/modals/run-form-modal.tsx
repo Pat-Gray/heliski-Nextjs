@@ -28,6 +28,7 @@ interface CalTopoFeature {
   pointCount: number;
   properties: Record<string, unknown>;
   groupId?: string;
+  hasImages?: boolean;
 }
 
 interface CalTopoGroup {
@@ -72,7 +73,6 @@ export default function RunFormModal({ preselectedSubAreaId }: RunFormModalProps
   const { data: caltopoMaps = [], isLoading: mapsLoading, error: mapsError } = useQuery<CalTopoMap[]>({
     queryKey: ["/api/caltopo/maps"],
     queryFn: async () => {
-      console.log('🔍 Fetching CalTopo maps...'); // Debug log
       const response = await fetch('/api/caltopo/fetch-account', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -81,12 +81,10 @@ export default function RunFormModal({ preselectedSubAreaId }: RunFormModalProps
       
       if (!response.ok) {
         const errorText = await response.text();
-        console.error('❌ CalTopo maps API error:', response.status, errorText);
         throw new Error(`Failed to fetch maps: ${response.status} ${errorText}`);
       }
       
       const data = await response.json();
-      console.log('✅ CalTopo maps response:', data); // Debug log
       return data.maps || [];
     },
     enabled: true, // Always fetch maps since GPX must come from CalTopo
@@ -151,15 +149,7 @@ export default function RunFormModal({ preselectedSubAreaId }: RunFormModalProps
       return response.json();
     },
     onSuccess: async (newRun) => {
-      console.log('🎉 Run created successfully:', newRun);
-      
       // Always cache CalTopo GPX since it's required
-      console.log('🔄 Caching CalTopo GPX for run:', {
-        runId: newRun.id,
-        mapId: caltopoMapId,
-        featureId: caltopoFeatureId
-      });
-      
       try {
         const cacheResponse = await fetch('/api/caltopo/cache-gpx', {
           method: 'POST',
@@ -175,10 +165,40 @@ export default function RunFormModal({ preselectedSubAreaId }: RunFormModalProps
           throw new Error(`Cache API failed: ${cacheResponse.statusText}`);
         }
         
-        const cacheResult = await cacheResponse.json();
-        console.log('✅ CalTopo GPX cached successfully:', cacheResult);
-      } catch (error) {
-        console.error('❌ Failed to cache CalTopo GPX:', error);
+        const _cacheResult = await cacheResponse.json();
+        
+        // Auto-sync CalTopo images and comments for this feature using the REAL endpoint
+        const selectedFeature = filteredFeatures.find(f => f.id === caltopoFeatureId);
+        if (selectedFeature) {
+          try {
+            const syncResponse = await fetch('/api/caltopo/sync-feature-images', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ 
+                mapId: caltopoMapId, 
+                featureId: caltopoFeatureId,
+                runId: newRun.id 
+              })
+            });
+            
+            if (syncResponse.ok) {
+              const syncResult = await syncResponse.json();
+              if (syncResult.syncedImages > 0 || syncResult.syncedComments > 0) {
+                const parts = [];
+                if (syncResult.syncedImages > 0) parts.push(`${syncResult.syncedImages} images`);
+                if (syncResult.syncedComments > 0) parts.push(`${syncResult.syncedComments} comments`);
+                
+                toast({ 
+                  title: "CalTopo Data Synced! 🎉", 
+                  description: `Successfully synced ${parts.join(' and ')} from CalTopo` 
+                });
+              }
+            }
+          } catch {
+            // Don't show error toast - it's not critical for run creation
+          }
+        }
+      } catch {
         toast({ 
           title: "Warning", 
           description: "Run created but failed to cache CalTopo GPX. You can link it later.",
@@ -379,18 +399,7 @@ export default function RunFormModal({ preselectedSubAreaId }: RunFormModalProps
               />
             </div>
             
-            <div>
-              <label htmlFor="runNotes" className="text-sm font-medium">
-                Run Notes
-              </label>
-              <Textarea
-                id="runNotes"
-                value={runNotes}
-                onChange={(e) => setRunNotes(e.target.value)}
-                placeholder="Enter run notes (optional)"
-                rows={3}
-              />
-            </div>
+           
             
             <div className="grid grid-cols-2 gap-4">
               <div>
@@ -590,7 +599,7 @@ export default function RunFormModal({ preselectedSubAreaId }: RunFormModalProps
                       ) : (
                         filteredFeatures.map((feature) => (
                           <SelectItem key={feature.id} value={feature.id}>
-                            {feature.title} 
+                            {feature.title} {feature.hasImages ? '📸 (Auto-sync)' : ''}
                           </SelectItem>
                         ))
                       )}
@@ -608,7 +617,7 @@ export default function RunFormModal({ preselectedSubAreaId }: RunFormModalProps
                       Selected: {selectedCalTopoFeature.title}
                     </span>
                   </div>
-                
+                  
                 </div>
               )}
             </div>

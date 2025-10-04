@@ -6,10 +6,6 @@ const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 // Create a function to validate environment variables at runtime
 function validateSupabaseConfig() {
   if (!supabaseUrl || !supabaseAnonKey) {
-    console.error('❌ Missing Supabase environment variables:', {
-      supabaseUrl: supabaseUrl ? 'Set' : 'Missing',
-      supabaseAnonKey: supabaseAnonKey ? 'Set' : 'Missing'
-    });
     throw new Error('Missing required Supabase environment variables');
   }
 }
@@ -84,6 +80,10 @@ export async function getRuns() {
     runPhoto: item.run_photo, // Convert run_photo to runPhoto
     avalanchePhoto: item.avalanche_photo, // Convert avalanche_photo to avalanchePhoto
     additionalPhotos: item.additional_photos, // Convert additional_photos to additionalPhotos
+    // CalTopo integration fields
+    caltopoMapId: item.caltopo_map_id, // Convert caltopo_map_id to caltopoMapId
+    caltopoFeatureId: item.caltopo_feature_id, // Convert caltopo_feature_id to caltopoFeatureId
+    gpxUpdatedAt: item.gpx_updated_at, // Convert gpx_updated_at to gpxUpdatedAt
     lastUpdated: item.last_updated,
     createdAt: item.created_at,
   }));
@@ -135,6 +135,8 @@ export async function getDailyPlanByDate(date: string) {
     .from('daily_plans')
     .select('*')
     .eq('plan_date', date)
+    .order('created_at', { ascending: false })
+    .limit(1)
     .maybeSingle();
   
   if (error) throw error;
@@ -238,7 +240,6 @@ export async function createRun(run: {
     gpx_updated_at: run.gpxUpdatedAt, // Convert gpxUpdatedAt to gpx_updated_at
   };
 
-  console.log('🔄 Creating run with data:', dbData);
   
   const { data, error } = await supabase
     .from('runs')
@@ -247,11 +248,8 @@ export async function createRun(run: {
     .single();
   
   if (error) {
-    console.error('❌ Supabase create run error:', error);
     throw new Error(`Database insert failed: ${error.message}`);
   }
-  
-  console.log('✅ Run created successfully:', data);
   return data;
 }
 
@@ -324,7 +322,6 @@ export async function updateRun(id: string, updates: Partial<{
   caltopoFeatureId: string | null;
   gpxUpdatedAt: Date | null;
 }>) {
-  console.log('🔄 Updating run in database:', { id, updates });
   
   // Convert camelCase to snake_case for database
   const dbUpdates: Record<string, unknown> = {};
@@ -347,7 +344,6 @@ export async function updateRun(id: string, updates: Partial<{
   if (updates.caltopoFeatureId !== undefined) dbUpdates.caltopo_feature_id = updates.caltopoFeatureId;
   if (updates.gpxUpdatedAt !== undefined) dbUpdates.gpx_updated_at = updates.gpxUpdatedAt;
   
-  console.log('🔄 Converted updates for database:', dbUpdates);
   
   const { data, error } = await supabase
     .from('runs')
@@ -357,11 +353,8 @@ export async function updateRun(id: string, updates: Partial<{
     .single();
   
   if (error) {
-    console.error('❌ Supabase update error:', error);
     throw new Error(`Database update failed: ${error.message}`);
   }
-  
-  console.log('✅ Run updated in database:', data);
   return data;
 }
 

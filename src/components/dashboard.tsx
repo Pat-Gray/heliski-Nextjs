@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
-import { Mountain,CheckCircle, MapPin, GripVertical } from "lucide-react";
+import { Mountain,CheckCircle, MapPin, GripVertical, Plus, Printer } from "lucide-react";
 import { useToast } from "@/contexts/hooks/use-toast";
 import { apiRequest, queryFn } from "@/lib/queryClient";
 import RunDetailView from "@/components/run-detail-view";
@@ -97,16 +97,6 @@ export default function Dashboard() {
     updateTimeoutsRef.current = {};
   }, [selectedAreas]);
 
-  // Listen for submit daily plan event from app-layout
-  useEffect(() => {
-    const handleSubmitDailyPlan = () => {
-      console.log('📋 Submit Daily Plan event received from app-layout');
-      _handleSubmitDailyPlan();
-    };
-
-    window.addEventListener('submit-daily-plan', handleSubmitDailyPlan);
-    return () => window.removeEventListener('submit-daily-plan', handleSubmitDailyPlan);
-  });
 
   const { data: runs = [] } = useQuery<Run[]>({
     queryKey: ["/api/runs"],
@@ -291,10 +281,8 @@ export default function Dashboard() {
   const saveComment = (runId: string) => {
     const comment = statusCommentInputs[runId] || '';
     console.log('Saving comment for run:', runId, 'comment:', comment);
-    if (comment.trim()) {
-      // Use optimistic updates for comment saving
-      updateRunStatusMutation.mutate({ runId, status: 'conditional', statusComment: comment });
-    }
+    // Always save the comment, even if empty (to clear it)
+    updateRunStatusMutation.mutate({ runId, status: 'conditional', statusComment: comment });
   };
 
   // Auto-save comment with debouncing - completely seamless
@@ -307,15 +295,13 @@ export default function Dashboard() {
     // Set a new timeout for auto-save
     updateTimeoutsRef.current[runId] = setTimeout(() => {
       const comment = statusCommentInputs[runId] || '';
-      if (comment.trim()) {
-        console.log('Auto-saving comment for run:', runId, 'comment:', comment);
-        // Save seamlessly without any visual indicators
-        updateRunStatusMutation.mutate({ 
-          runId, 
-          status: 'conditional', 
-          statusComment: comment 
-        });
-      }
+      console.log('Auto-saving comment for run:', runId, 'comment:', comment);
+      // Save seamlessly without any visual indicators (including empty comments)
+      updateRunStatusMutation.mutate({ 
+        runId, 
+        status: 'conditional', 
+        statusComment: comment 
+      });
     }, 300); // Very fast auto-save for seamless experience
   };
   // Sync CalTopo styles function
@@ -419,19 +405,19 @@ export default function Dashboard() {
       console.log('🖨️ Setting print data:', printData);
       setPrintData(printData);
       
-      // Single print attempt with proper timing
-      setTimeout(() => {
-        console.log('🖨️ Triggering print...');
-        try {
-          triggerPrint();
-          console.log('✅ Print triggered successfully');
-        } catch (error) {
-          console.error('❌ Print trigger failed:', error);
-          // Fallback: try direct window.print()
-          console.log('🖨️ Fallback: trying window.print() directly...');
-          window.print();
-        }
-      }, 500); // Single delay to ensure print data is set
+      // // Single print attempt with proper timing
+      // setTimeout(() => {
+      //   console.log('🖨️ Triggering print...');
+      //   try {
+      //     triggerPrint();
+      //     console.log('✅ Print triggered successfully');
+      //   } catch (error) {
+      //     console.error('❌ Print trigger failed:', error);
+      //     // Fallback: try direct window.print()
+      //     console.log('🖨️ Fallback: trying window.print() directly...');
+      //     window.print();
+      //   }
+      // }, 500); // Single delay to ensure print data is set
 
       // Sync CalTopo styles after successful daily plan submission
       syncCalTopoStyles();
@@ -559,11 +545,180 @@ export default function Dashboard() {
     const normalizedDate = new Date();
     normalizedDate.setHours(0, 0, 0, 0);
     
-    console.log('Creating daily plan with data:', {
-      planDate: normalizedDate.toISOString(),
-      runIds: filteredRuns.map(run => run.id),
-      statusSnapshot,
-      notes: planNotes,
+    // Update CalTopo comments for ALL runs with CalTopo integration (regardless of status comment)
+    const runsToSync = filteredRuns.filter(run => run.caltopoMapId && run.caltopoFeatureId);
+    
+    console.log('🔄 Daily Plan Status Comment Sync:', {
+      totalRuns: filteredRuns.length,
+      runsWithStatusComments: filteredRuns.filter(run => run.statusComment).length,
+      runsWithCalTopo: filteredRuns.filter(run => run.caltopoMapId && run.caltopoFeatureId).length,
+      runsToSync: runsToSync.length,
+      runsToSyncDetails: runsToSync.map(run => ({
+        name: run.name,
+        status: run.status,
+        statusComment: run.statusComment || 'none',
+        caltopoMapId: run.caltopoMapId,
+        caltopoFeatureId: run.caltopoFeatureId
+      }))
+    });
+    
+    const caltopoSyncPromises = runsToSync.map(async (run) => {
+        try {
+          const currentDate = new Date().toLocaleDateString('en-US', {
+            year: 'numeric',
+            month: 'short',
+            day: 'numeric'
+          });
+          
+          // Format status comment based on run status
+          let statusCommentHeader;
+          console.log(`📊 Run status for ${run.name}:`, {
+            status: run.status,
+            statusComment: run.statusComment,
+            hasComment: !!run.statusComment,
+            isConditional: run.status === 'conditional',
+            willIncludeComment: run.status === 'conditional' && run.statusComment && run.statusComment.trim()
+          });
+          
+          // All status types use the same format: --- Status Updated: date ---
+          // Only include status comment for conditional runs
+          if (run.status === 'conditional' && run.statusComment && run.statusComment.trim()) {
+            // Has status comment: Date + Comment
+            statusCommentHeader = `--- Status Updated: ${currentDate} ---\n${run.statusComment.trim()}\n---`;
+          } else {
+            // No status comment: Just the date
+            statusCommentHeader = `--- Status Updated: ${currentDate} ---`;
+          }
+          
+          // Get current CalTopo comments directly from CalTopo API
+          // This ensures we're working with the actual CalTopo data, not mixed web app data
+          let currentCalTopoComments = '';
+          try {
+            const caltopoResponse = await fetch('/api/caltopo/fetch-map', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ mapId: run.caltopoMapId })
+            });
+            
+            if (caltopoResponse.ok) {
+              const caltopoData = await caltopoResponse.json();
+              const feature = caltopoData.features?.find((f: { id: string }) => f.id === run.caltopoFeatureId);
+              currentCalTopoComments = feature?.properties?.description || '';
+            }
+          } catch (error) {
+            console.error(`Failed to fetch CalTopo comments for ${run.name}:`, error);
+            // Fallback to local runNotes if CalTopo fetch fails
+            currentCalTopoComments = run.runNotes || '';
+          }
+          
+          // Remove ALL existing status comments/updates first, then add new one
+          // Use a more comprehensive approach to catch all variations
+          let cleanedNotes = currentCalTopoComments;
+          
+          // Step 1: Remove complete status comment blocks (with content between --- markers)
+          cleanedNotes = cleanedNotes.replace(/--- Status Updated:[\s\S]*?---/g, '');
+          
+          // Step 2: Remove any remaining status lines that don't have closing ---
+          cleanedNotes = cleanedNotes.replace(/--- Status Updated:[\s\S]*?(?=\n\n|\n---|$)/g, '');
+          
+          // Step 3: Remove any standalone status lines
+          cleanedNotes = cleanedNotes.replace(/^--- Status Updated.*$/gm, '');
+          
+          // Step 4: Remove any standalone "---" lines that might be left behind
+          cleanedNotes = cleanedNotes.replace(/^---\s*$/gm, '');
+          
+          // Step 5: Clean up whitespace and empty lines
+          const finalCleanedNotes = cleanedNotes
+            .replace(/^\s*\n+|\n+\s*$/g, '') // Remove leading/trailing empty lines
+            .replace(/\n{3,}/g, '\n\n') // Replace multiple newlines with double newlines
+            .trim();
+          
+          // Test the regex on a sample string to make sure it works
+          const testString = `--- Status Updated: Oct 3, 2025 ---\nSome comment\n---\n\n--- CalTopo Comments ---\nOriginal comments`;
+          let testCleaned = testString;
+          testCleaned = testCleaned.replace(/--- Status Updated:[\s\S]*?---/g, '');
+          testCleaned = testCleaned.replace(/--- Status Updated:[\s\S]*?(?=\n\n|\n---|$)/g, '');
+          testCleaned = testCleaned.replace(/^--- Status Updated.*$/gm, '');
+          testCleaned = testCleaned.replace(/^---\s*$/gm, '');
+          testCleaned = testCleaned.replace(/^\s*\n+|\n+\s*$/g, '').replace(/\n{3,}/g, '\n\n').trim();
+          
+          console.log(`🧹 Status comment replacement for ${run.name}:`, {
+            runStatus: run.status,
+            original: currentCalTopoComments.slice(0, 300) + '...',
+            cleaned: finalCleanedNotes.slice(0, 300) + '...',
+            newStatusHeader: statusCommentHeader,
+            testRegex: {
+              input: testString,
+              output: testCleaned,
+              working: testCleaned.includes('CalTopo Comments')
+            },
+            steps: {
+              step1: currentCalTopoComments.replace(/--- Status Updated:[\s\S]*?---/g, '').slice(0, 100) + '...',
+              step2: currentCalTopoComments.replace(/--- Status Updated:[\s\S]*?---/g, '').replace(/--- Status Updated:[\s\S]*?(?=\n\n|\n---|$)/g, '').slice(0, 100) + '...'
+            }
+          });
+          
+          const updatedNotes = `${statusCommentHeader}\n\n${finalCleanedNotes}`;
+          
+          // Sync to CalTopo and update local database
+          console.log(`🔄 Syncing status comment for run: ${run.name}`, {
+            mapId: run.caltopoMapId,
+            featureId: run.caltopoFeatureId,
+            statusComment: run.statusComment,
+            updatedNotes: updatedNotes.slice(0, 200) + '...'
+          });
+          
+          const syncResponse = await fetch('/api/caltopo/update-feature-comments', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              mapId: run.caltopoMapId,
+              featureId: run.caltopoFeatureId,
+              comments: updatedNotes
+            })
+          });
+          
+          if (syncResponse.ok) {
+            console.log(`✅ Successfully synced status comment for run: ${run.name}`);
+            
+            // Also update the local database with the new CalTopo content
+            try {
+              console.log(`💾 Updating local database for run: ${run.name}`, {
+                runId: run.id,
+                updatedNotes: updatedNotes.slice(0, 200) + '...'
+              });
+              
+              const dbUpdateResponse = await fetch(`/api/runs/${run.id}`, {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ runNotes: updatedNotes })
+              });
+              
+              if (dbUpdateResponse.ok) {
+                console.log(`✅ Successfully updated local database for run: ${run.name}`);
+                // Invalidate the runs query to refresh the run detail view
+                queryClient.invalidateQueries({ queryKey: ['/api/runs'] });
+                console.log(`🔄 Invalidated runs query cache for run: ${run.name}`);
+              } else {
+                const errorData = await dbUpdateResponse.json();
+                console.error(`❌ Failed to update local database for run: ${run.name}`, errorData);
+              }
+            } catch (dbError) {
+              console.error(`❌ Database update error for run: ${run.name}`, dbError);
+            }
+          } else {
+            const errorData = await syncResponse.json();
+            console.error(`❌ Failed to sync status comment for run: ${run.name}`, errorData);
+          }
+          
+        } catch (error) {
+          console.error(`❌ Error syncing status comment for run: ${run.name}`, error);
+        }
+      });
+    
+    // Wait for all CalTopo syncs to complete (don't block the daily plan creation)
+    Promise.all(caltopoSyncPromises).catch(() => {
+      // Silently handle sync failures - not critical for daily plan creation
     });
     
     submitDailyPlanMutation.mutate({
@@ -613,13 +768,7 @@ export default function Dashboard() {
                   {selectedAreas.size > 0 && (
                     <>
                       <DashboardFilters onApplyRiskAssessment={handleAvalancheRiskAssessment} />
-                      <Button 
-                        onClick={_handleSubmitDailyPlan}
-                        disabled={filteredRuns.length === 0}
-                        className="bg-blue-600 hover:bg-blue-700 "
-                      >
-                        Submit Daily Plan
-                      </Button> 
+                      
                     </>
                   )}
                 </div>
@@ -687,7 +836,7 @@ export default function Dashboard() {
                     return (
                       <Card key={area.id}>
                         <CardHeader>
-                          <CardTitle className="flex items-center">
+                          <CardTitle className="flex items-center ml-3 mt-1">
                             <Mountain className="w-5 h-5 mr-2" />
                             {area.name}
                           </CardTitle>
@@ -732,15 +881,17 @@ export default function Dashboard() {
                                       >
                                         <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-2 gap-2">
                                           <div className="flex items-center space-x-3 flex-1 min-w-0">
-                                            <div className={`w-3 h-3 rounded-full flex-shrink-0 ${
+                                            {/* <div className={`w-3 h-3 rounded-full flex-shrink-0 ${
                                               run.status === "open" 
                                                 ? "bg-green-500" 
                                                 : run.status === "conditional" 
                                                 ? "bg-orange-500" 
                                                 : "bg-red-500"
-                                            }`} />
+                                            }`} /> */}
                                             <div className="min-w-0 flex-1">
-                                              <div className="font-medium truncate">#{run.runNumber} - {run.name}</div>
+                                              <div className="font-medium truncate"><span className="font-light">{`${run.runNumber}   -      `} </span>
+                                                
+                                                 {run.name}</div>
                                               <div className="text-sm text-muted-foreground truncate">
                                                 {run.aspect} • {run.elevationMax}-{run.elevationMin}m
                                               </div>
@@ -799,7 +950,7 @@ export default function Dashboard() {
                                             <Input
                                               data-run-id={run.id}
                                               placeholder="Enter status comment..."
-                                              value={statusCommentInputs[run.id] || run.statusComment || ""}
+                                              value={statusCommentInputs[run.id] !== undefined ? statusCommentInputs[run.id] : (run.statusComment || "")}
                                               onChange={(e) => {
                                                 handleStatusCommentChange(run.id, e.target.value);
                                                 autoSaveComment(run.id); // Trigger auto-save on change
@@ -827,6 +978,28 @@ export default function Dashboard() {
                   })
               )}
             </div>
+            {selectedAreas.size > 0 && (
+            <div className="flex items-cente m-4 space-x-4">
+              <Button 
+                onClick={_handleSubmitDailyPlan}
+                disabled={filteredRuns.length === 0}
+                data-testid="button-submit-daily-plan"
+                size="sm"
+                title={filteredRuns.length === 0 ? "Select runs first" : "Submit daily plan"}
+              >
+                <Plus className="w-4 h-4 mr-2" />
+                Submit Daily Plan
+              </Button>
+              <Button 
+                onClick={triggerPrint}
+                variant="outline"
+                size="sm"
+              >
+                <Printer className="h-4 w-4 mr-2" />
+                Print Plan
+              </Button>
+            </div>
+          )}
             </div>
           </div>
         </div>
