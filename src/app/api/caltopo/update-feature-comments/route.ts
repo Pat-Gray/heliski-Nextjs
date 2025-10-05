@@ -156,6 +156,29 @@ export async function POST(request: NextRequest) {
     console.log(`✅ Successfully updated comments for feature ${featureId}`);
     console.log(`📊 Update response:`, updateResponse);
 
+    // Verify the update was actually applied by fetching the feature again
+    try {
+      const verifyResponse = await caltopoRequest(
+        'GET',
+        `/api/v1/map/${mapId}/Shape/${featureId}`,
+        credentialId,
+        credentialSecret
+      ) as CalTopoFeature;
+      
+      const actualDescription = verifyResponse.properties?.description || '';
+      console.log(`🔍 Verification - Actual description length: ${actualDescription.length}`);
+      console.log(`🔍 Verification - Expected comments length: ${comments.length}`);
+      console.log(`🔍 Verification - Description matches: ${actualDescription === comments}`);
+      
+      if (actualDescription !== comments) {
+        console.warn(`⚠️ CalTopo update may not have been applied correctly`);
+        console.warn(`Expected: ${comments.slice(0, 100)}...`);
+        console.warn(`Actual: ${actualDescription.slice(0, 100)}...`);
+      }
+    } catch (verifyError) {
+      console.error(`❌ Failed to verify CalTopo update:`, verifyError);
+    }
+
     return NextResponse.json({
       success: true,
       message: 'Feature comments updated successfully',

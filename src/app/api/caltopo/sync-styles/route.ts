@@ -167,6 +167,36 @@ export async function POST(request: NextRequest) {
               updatedFeature
             );
 
+            // Verify the update was actually applied
+            try {
+              const verifyResponse = await caltopoRequest(
+                'GET',
+                `/api/v1/map/${mapId}/Shape/${run.caltopo_feature_id}`,
+                credentialId,
+                credentialSecret
+              ) as { properties?: Record<string, unknown> };
+              
+              const actualFill = verifyResponse.properties?.fill;
+              const actualStroke = verifyResponse.properties?.stroke;
+              const expectedFill = STATUS_COLORS[run.status];
+              const expectedStroke = STATUS_STROKE_COLORS[run.status];
+              
+              console.log(`🔍 Style verification for ${run.name}:`, {
+                expectedFill,
+                actualFill,
+                expectedStroke,
+                actualStroke,
+                fillMatches: actualFill === expectedFill,
+                strokeMatches: actualStroke === expectedStroke
+              });
+              
+              if (actualFill !== expectedFill || actualStroke !== expectedStroke) {
+                console.warn(`⚠️ Style update may not have been applied correctly for ${run.name}`);
+              }
+            } catch (verifyError) {
+              console.error(`❌ Failed to verify style update for ${run.name}:`, verifyError);
+            }
+
             console.log(`✅ Updated style for run ${run.name} (${run.status})`);
             results.updated++;
             mapUpdated = true;

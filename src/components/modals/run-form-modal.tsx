@@ -6,7 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
-import { Plus, Upload, X, MapPin } from "lucide-react";
+import { Plus, Upload, X } from "lucide-react";
 import { useMutation, useQueryClient, useQuery } from "@tanstack/react-query";
 import { useToast } from "@/contexts/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
@@ -567,10 +567,10 @@ export default function RunFormModal({ preselectedSubAreaId }: RunFormModalProps
                         <SelectItem key={map.id} value={map.id}>
                           <div className="flex flex-col">
                             <span>{map.title}</span>
-                            <span className="text-xs text-muted-foreground">
+                            {/* <span className="text-xs text-muted-foreground">
                               {map.totalFeatures || 0} features, {map.totalMarkers || 0} markers, {map.totalPoints || 0} points
                               {map.lastSynced && ` • Synced ${new Date(map.lastSynced).toLocaleDateString()}`}
-                            </span>
+                            </span> */}
                           </div>
                         </SelectItem>
                       ))
@@ -651,10 +651,10 @@ export default function RunFormModal({ preselectedSubAreaId }: RunFormModalProps
                                 {feature.class === 'Marker' && <span className="text-xs">📍</span>}
                                 {feature.geometryType === 'Point' && <span className="text-xs">🔵</span>}
                               </span>
-                              <span className="text-xs text-muted-foreground">
+                              {/* <span className="text-xs text-muted-foreground">
                                 {feature.geometryType} • {feature.pointCount} points
                                 {feature.markerSymbol && ` • ${feature.markerSymbol}`}
-                              </span>
+                              </span> */}
                             </div>
                           </SelectItem>
                         ))
@@ -665,17 +665,17 @@ export default function RunFormModal({ preselectedSubAreaId }: RunFormModalProps
               )}
 
               {/* Selected Feature Info */}
-              {selectedCalTopoFeature && (
-                <div className="bg-green-50 border border-green-200 rounded-md p-3">
-                  <div className="flex items-center space-x-2">
-                    <MapPin className="w-4 h-4 text-green-600" />
-                    <span className="text-sm font-medium text-green-800">
-                      Selected: {selectedCalTopoFeature.title}
-                    </span>
+                {/* {selectedCalTopoFeature && (
+                  <div className="bg-green-50 border border-green-200 rounded-md p-3">
+                    <div className="flex items-center space-x-2">
+                      <MapPin className="w-4 h-4 text-green-600" />
+                      <span className="text-sm font-medium text-green-800">
+                        Selected: {selectedCalTopoFeature.title}
+                      </span>
+                    </div>
+                    
                   </div>
-                  
-                </div>
-              )}
+                )} */}
             </div>
           </div>
 

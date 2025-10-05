@@ -25,32 +25,6 @@ export default function PrintDailyPlan({
 }: PrintDailyPlanProps) {
   return (
     <div className="print-only">
-      <div className="print-header">
-        <h1>Heli-Ski Daily Operations Plan - {currentDate}</h1>
-      
-      </div>
-      
-      {/* <div className="print-summary">
-        <div className="print-summary-stats">
-          <div className="print-stat">
-            <div className="print-stat-label">Open Runs</div>
-            <div className="print-stat-value open">{greenCount}</div>
-          </div>
-          <div className="print-stat">
-            <div className="print-stat-label">Conditional</div>
-            <div className="print-stat-value conditional">{orangeCount}</div>
-          </div>
-          <div className="print-stat">
-            <div className="print-stat-label">Closed</div>
-            <div className="print-stat-value closed">{redCount}</div>
-          </div>
-          <div className="print-stat">
-            <div className="print-stat-label">Total Runs</div>
-            <div className="print-stat-value">{filteredRuns.length}</div>
-          </div>
-        </div>
-      </div> */}
-      
       <div className="print-areas">
         {areas
           .filter(area => selectedAreas.has(area.id))
@@ -65,6 +39,11 @@ export default function PrintDailyPlan({
 
             return (
               <div key={area.id} className="print-area">
+                <div className="print-area-page-header">
+                  <h1>Heli-Ski Daily Operations Plan - {currentDate}</h1>
+                  <div className="print-area-title">{area.name}</div>
+                </div>
+                
                 <div className="print-area-header">
                   {area.name}
                 </div>

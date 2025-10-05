@@ -4,6 +4,7 @@ import "mapbox-gl/dist/mapbox-gl.css";
 import { QueryProvider } from "@/components/query-provider";
 import { PrintProvider } from "@/components/print-provider";
 import { AuthProvider } from "@/contexts/auth-context";
+import { ToastProvider } from "@/components/ui/toast-provider";
 import { AppLayout } from "../components/app-layout";
 
 export const metadata: Metadata = {
@@ -22,9 +23,11 @@ export default function RootLayout({
         <AuthProvider>
           <QueryProvider>
             <PrintProvider>
-              <AppLayout>
-                {children}
-              </AppLayout>
+              <ToastProvider>
+                <AppLayout>
+                  {children}
+                </AppLayout>
+              </ToastProvider>
             </PrintProvider>
           </QueryProvider>
         </AuthProvider>

@@ -270,8 +270,33 @@ const Dashboard = React.memo(function Dashboard() {
       // No need to refetch since we're using optimistic updates
       // The optimistic update already reflects the latest state
     },
-    onSuccess: () => {
-      // Silent success for instant updates - no toast needed
+    onSuccess: async (data, variables) => {
+      // Sync to CalTopo if this is a status change
+      const updatedRun = filteredRuns.find(run => run.id === variables.runId);
+      if (updatedRun && updatedRun.caltopoMapId && updatedRun.caltopoFeatureId) {
+        try {
+          // Create a mock run object with the updated status for CalTopo sync
+          const runForSync = {
+            ...updatedRun,
+            status: variables.status as 'open' | 'conditional' | 'closed',
+            statusComment: variables.statusComment || null
+          };
+          
+          // Sync both comments and styles to CalTopo in the background
+          const syncPromises = [];
+          
+          // Always sync comments for status changes (to clear or add status comments)
+          syncPromises.push(syncCalTopoComments([runForSync]));
+          
+          // Always sync styles for status changes
+          syncPromises.push(syncCalTopoStyles());
+          
+          await Promise.allSettled(syncPromises);
+          console.log(`✅ Synced status update to CalTopo for run ${updatedRun.name} (${variables.status})`);
+        } catch (error) {
+          console.error(`❌ Failed to sync status update to CalTopo for run ${updatedRun.name}:`, error);
+        }
+      }
     },
   });
 
@@ -342,104 +367,96 @@ const Dashboard = React.memo(function Dashboard() {
       });
     }, 300); // Very fast auto-save for seamless experience
   }, [updateRunStatusMutation]);
-  // Sync CalTopo comments function
-  const syncCalTopoComments = async (runs: typeof filteredRuns) => {
+  // Optimized CalTopo comments sync function
+  const syncCalTopoComments = useCallback(async (runs: typeof filteredRuns) => {
     try {
       console.log('💬 Syncing CalTopo comments...');
       
       const currentDate = new Date().toISOString().split('T')[0];
+      
+      // Process runs in parallel with optimized batching
       const commentPromises = runs.map(async (run) => {
         try {
-          // Format status comment based on run status
-          let statusCommentHeader;
-          
-          if (run.status === 'conditional' && run.statusComment && run.statusComment.trim()) {
-            statusCommentHeader = `--- Status Updated: ${currentDate} ---\n${run.statusComment.trim()}\n---`;
-          } else if (run.status === 'open' || run.status === 'closed') {
-            // For open and closed, only show status and date
-            statusCommentHeader = `--- Status Updated: ${currentDate} ---`;
-          } else {
-            statusCommentHeader = `--- Status Updated: ${currentDate} ---`;
+          // Skip if no CalTopo integration
+          if (!run.caltopoMapId || !run.caltopoFeatureId) {
+            return { success: true, runId: run.id, skipped: true };
           }
           
-          // Get current CalTopo comments
+          // Get current CalTopo comments (non-status comments only)
           const currentCalTopoComments = run.runNotes || '';
           
-          // Debug: Log original comments for troubleshooting
-          if (currentCalTopoComments.includes('--- Status Updated:')) {
-            console.log(`🔍 Cleaning comments for run ${run.name}:`, {
-              original: currentCalTopoComments.slice(0, 200) + '...',
-              hasStatusBlocks: currentCalTopoComments.includes('--- Status Updated:')
-            });
-          }
-          
-          // Clean existing status comments - comprehensive approach
-          let cleanedNotes = currentCalTopoComments;
-          
-          // Remove ALL status comment blocks completely using multiple approaches
-          // First, remove blocks that end with "---"
-          const beforeFirst = cleanedNotes;
-          cleanedNotes = cleanedNotes.replace(/--- Status Updated:[\s\S]*?---/g, '');
-          if (beforeFirst !== cleanedNotes) {
-            console.log(`✅ Removed status blocks ending with --- for ${run.name}`);
-          }
-          
-          // Then, remove blocks that go to the end of the string
-          const beforeSecond = cleanedNotes;
-          cleanedNotes = cleanedNotes.replace(/--- Status Updated:[\s\S]*$/g, '');
-          if (beforeSecond !== cleanedNotes) {
-            console.log(`✅ Removed status blocks to end of string for ${run.name}`);
-          }
-          
-          // Also handle cases where there might be multiple consecutive status blocks
-          const beforeThird = cleanedNotes;
-          cleanedNotes = cleanedNotes.replace(/(--- Status Updated:[\s\S]*?---\s*)+/g, '');
-          if (beforeThird !== cleanedNotes) {
-            console.log(`✅ Removed consecutive status blocks for ${run.name}`);
-          }
-          
-          // Clean up any remaining whitespace and newlines
-          cleanedNotes = cleanedNotes
-            .replace(/^\s*\n+|\n+\s*$/g, '')
-            .replace(/\n{3,}/g, '\n\n')
+          // Remove existing status comment blocks efficiently
+          const cleanedNotes = currentCalTopoComments
+            .replace(/--- Status Updated:[\s\S]*?(?=--- Status Updated:|$)/g, '')
             .trim();
           
-          // Debug: Log final result
-          if (currentCalTopoComments !== cleanedNotes) {
-            console.log(`🧹 Final cleaned comments for ${run.name}:`, {
-              original: currentCalTopoComments.slice(0, 100) + '...',
-              cleaned: cleanedNotes.slice(0, 100) + '...',
-              removed: currentCalTopoComments.length - cleanedNotes.length + ' characters'
-            });
+          // Create the new status comment
+          let updatedNotes;
+          if (run.status === 'conditional' && run.statusComment?.trim()) {
+            updatedNotes = `--- Status Updated: ${currentDate}: ${run.statusComment.trim()}`;
+            if (cleanedNotes) {
+              updatedNotes += `\n\n${cleanedNotes}`;
+            }
+          } else {
+            // For open/closed: no status comment, just keep existing non-status comments
+            updatedNotes = cleanedNotes;
           }
           
-          const updatedNotes = `${statusCommentHeader}\n\n${cleanedNotes}`;
-          
-          // Update CalTopo comments
-          const syncResponse = await fetch('/api/caltopo/update-feature-comments', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              mapId: run.caltopoMapId,
-              featureId: run.caltopoFeatureId,
-              comments: updatedNotes
-            })
+          // Debug logging
+          console.log(`🔍 Comment sync for ${run.name} (${run.status}):`, {
+            currentCalTopoComments: currentCalTopoComments.slice(0, 100) + '...',
+            cleanedNotes: cleanedNotes.slice(0, 100) + '...',
+            updatedNotes: updatedNotes.slice(0, 100) + '...',
+            statusComment: run.statusComment,
+            needsUpdate: updatedNotes !== currentCalTopoComments,
+            caltopoMapId: run.caltopoMapId,
+            caltopoFeatureId: run.caltopoFeatureId
           });
           
-          if (syncResponse.ok) {
-            // Update local database
-            await fetch(`/api/runs/${run.id}`, {
-              method: 'PATCH',
+          // Skip if no changes needed
+          if (updatedNotes === currentCalTopoComments) {
+            return { success: true, runId: run.id, skipped: true, reason: 'No changes needed' };
+          }
+          
+          // Update CalTopo comments with timeout
+          const controller = new AbortController();
+          const timeoutId = setTimeout(() => controller.abort(), 10000); // 10s timeout
+          
+          try {
+            const syncResponse = await fetch('/api/caltopo/update-feature-comments', {
+              method: 'POST',
               headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ runNotes: updatedNotes })
+              body: JSON.stringify({
+                mapId: run.caltopoMapId,
+                featureId: run.caltopoFeatureId,
+                comments: updatedNotes
+              }),
+              signal: controller.signal
             });
             
-            console.log(`✅ Updated comments for run ${run.name}`);
-            return { success: true, runId: run.id };
-          } else {
-            throw new Error(`HTTP ${syncResponse.status}`);
+            clearTimeout(timeoutId);
+            
+            if (syncResponse.ok) {
+              // Update local database in parallel (don't wait)
+              fetch(`/api/runs/${run.id}`, {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ runNotes: updatedNotes })
+              }).catch(err => console.warn(`Failed to update local DB for ${run.name}:`, err));
+              
+              console.log(`✅ Updated comments for run ${run.name}`);
+              return { success: true, runId: run.id };
+            } else {
+              throw new Error(`HTTP ${syncResponse.status}`);
+            }
+          } finally {
+            clearTimeout(timeoutId);
           }
         } catch (error) {
+          if (error instanceof Error && error.name === 'AbortError') {
+            console.error(`⏰ Timeout syncing comments for run ${run.name}`);
+            return { success: false, runId: run.id, error: 'Request timeout' };
+          }
           console.error(`❌ Failed to sync comments for run ${run.name}:`, error);
           return { success: false, runId: run.id, error: error instanceof Error ? error.message : 'Unknown error' };
         }
@@ -448,48 +465,74 @@ const Dashboard = React.memo(function Dashboard() {
       const results = await Promise.all(commentPromises);
       const successful = results.filter(r => r.success).length;
       const failed = results.filter(r => !r.success).length;
+      const skipped = results.filter(r => r.skipped).length;
       
-      console.log(`💬 Comment sync completed: ${successful} successful, ${failed} failed`);
-      return { successful, failed, results };
+      console.log(`💬 Comment sync completed: ${successful} successful, ${failed} failed, ${skipped} skipped`);
+      return { successful, failed, skipped, results };
       
     } catch (error) {
       console.error('❌ CalTopo comment sync failed:', error);
       throw error;
     }
-  };
+  }, []);
 
-  // Sync CalTopo styles function
-  const syncCalTopoStyles = async () => {
+  // Optimized CalTopo styles sync function
+  const syncCalTopoStyles = useCallback(async () => {
     try {
       console.log('🎨 Syncing CalTopo styles...');
       
-      const response = await fetch('/api/caltopo/sync-styles', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          runIds: filteredRuns.map(run => run.id)
-        })
-      });
-
-      if (!response.ok) {
-        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-      }
-
-      const result = await response.json();
+      // Filter runs that need style updates
+      const runsToUpdate = filteredRuns.filter(run => 
+        run.caltopoMapId && run.caltopoFeatureId
+      );
       
-      if (result.success) {
-        console.log(`🎨 Style sync completed: ${result.updated} updated, ${result.failed} failed`);
-        return result;
-      } else {
-        throw new Error(result.error || 'Unknown sync error');
+      if (runsToUpdate.length === 0) {
+        console.log('🎨 No runs need style updates');
+        return { success: true, updated: 0, failed: 0, skipped: 0 };
+      }
+      
+      // Add timeout for style sync
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 15000); // 15s timeout
+      
+      try {
+        const response = await fetch('/api/caltopo/sync-styles', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            runIds: runsToUpdate.map(run => run.id)
+          }),
+          signal: controller.signal
+        });
+
+        clearTimeout(timeoutId);
+
+        if (!response.ok) {
+          throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+        }
+
+        const result = await response.json();
+        
+        if (result.success) {
+          console.log(`🎨 Style sync completed: ${result.updated} updated, ${result.failed} failed`);
+          return result;
+        } else {
+          throw new Error(result.error || 'Unknown sync error');
+        }
+      } finally {
+        clearTimeout(timeoutId);
       }
     } catch (error) {
+      if (error instanceof Error && error.name === 'AbortError') {
+        console.error('⏰ CalTopo style sync timed out');
+        throw new Error('Style sync request timed out');
+      }
       console.error('❌ CalTopo style sync failed:', error);
       throw error;
     }
-  };
+  }, [filteredRuns]);
   
   const submitDailyPlanMutation = useMutation({
     mutationFn: async (planData: InsertDailyPlan) => {
@@ -511,15 +554,18 @@ const Dashboard = React.memo(function Dashboard() {
       }
       return response.json();
     },
-    onSuccess: () => {
+    onSuccess: async () => {
+      // 1. Immediate UI updates (non-blocking)
       queryClient.invalidateQueries({ queryKey: ["/api/daily-plans"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/runs"] }); // Refresh runs data
+      queryClient.invalidateQueries({ queryKey: ["/api/runs"] });
+      
+      // 2. Show success message immediately
       toast({ 
         title: "Daily plan submitted successfully", 
         description: "All current run statuses and comments have been saved as a structured snapshot."
       });
       
-      // Set print data for daily plan
+      // 3. Set print data (synchronous, fast)
       const printData = {
         areas,
         subAreas,
@@ -531,6 +577,36 @@ const Dashboard = React.memo(function Dashboard() {
         redCount,
       };
       setPrintData(printData);
+      
+      // 4. CalTopo sync (background, non-blocking)
+      const runsToSync = filteredRuns.filter(run => run.caltopoMapId && run.caltopoFeatureId);
+      
+      if (runsToSync.length > 0) {
+        console.log(`🔄 Syncing ${runsToSync.length} runs to CalTopo...`);
+        
+        // Run CalTopo sync in background without blocking UI
+        Promise.allSettled([
+          syncCalTopoComments(runsToSync),
+          syncCalTopoStyles()
+        ]).then((results) => {
+          const [commentResult, styleResult] = results;
+          
+          // Log results but don't show error toasts for background sync
+          if (commentResult.status === 'fulfilled') {
+            console.log('✅ CalTopo comments synced successfully');
+          } else {
+            console.error('❌ CalTopo comments sync failed:', commentResult.reason);
+          }
+          
+          if (styleResult.status === 'fulfilled') {
+            console.log('✅ CalTopo styles synced successfully');
+          } else {
+            console.error('❌ CalTopo styles sync failed:', styleResult.reason);
+          }
+        }).catch((error) => {
+          console.error('❌ CalTopo sync failed:', error);
+        });
+      }
     },
   });
   
@@ -592,7 +668,7 @@ const Dashboard = React.memo(function Dashboard() {
     setShowConfirmationModal(true);
   };
 
-  const handleConfirmSubmitDailyPlan = async () => {
+  const handleConfirmSubmitDailyPlan = useCallback(async () => {
     setShowConfirmationModal(false);
     setShowOverrideOption(false);
     
@@ -626,60 +702,30 @@ const Dashboard = React.memo(function Dashboard() {
       }
     }
     
-    // Create structured status snapshot
+    // Optimize status snapshot creation
     const statusSnapshot = filteredRuns.map(run => ({
       runId: run.id,
       status: run.status as 'open' | 'conditional' | 'closed',
       statusComment: run.statusComment || null,
     }));
     
-    // Generate summary notes with current status and comments for reference
-    const statusSummary = filteredRuns.map(run => {
-      let summary = `${run.name}: ${run.status.toUpperCase()}`;
-      if (run.statusComment) {
-        summary += ` - ${run.statusComment}`;
-      }
-      return summary;
-    }).join('\n');
+    // Optimize summary generation
+    const currentDateStr = currentDate || new Date().toISOString().split('T')[0];
+    const statusSummary = filteredRuns
+      .map(run => {
+        let summary = `${run.name}: ${run.status.toUpperCase()}`;
+        if (run.statusComment) {
+          summary += ` - ${run.statusComment}`;
+        }
+        return summary;
+      })
+      .join('\n');
     
-    const planNotes = `Daily Plan Summary - ${currentDate || new Date().toISOString().split('T')[0]}\n\nRun Status:\n${statusSummary}`;
+    const planNotes = `Daily Plan Summary - ${currentDateStr}\n\nRun Status:\n${statusSummary}`;
     
     // Normalize date to avoid timezone issues
     const normalizedDate = new Date();
     normalizedDate.setHours(0, 0, 0, 0);
-    
-    // Update CalTopo comments and styles for ALL runs with CalTopo integration
-    const runsToSync = filteredRuns.filter(run => run.caltopoMapId && run.caltopoFeatureId);
-    
-    if (runsToSync.length > 0) {
-      console.log(`🔄 Syncing ${runsToSync.length} runs to CalTopo...`);
-      
-      // Sync CalTopo comments and styles in parallel (non-blocking)
-      const caltopoSyncPromises = [
-        // Sync status comments
-        syncCalTopoComments(runsToSync),
-        // Sync feature styles/colors
-        syncCalTopoStyles()
-      ];
-      
-      // Don't block daily plan creation - run in background
-      Promise.allSettled(caltopoSyncPromises).then((results) => {
-        const commentResult = results[0];
-        const styleResult = results[1];
-        
-        if (commentResult.status === 'fulfilled') {
-          console.log('✅ CalTopo comments synced successfully');
-        } else {
-          console.error('❌ CalTopo comments sync failed:', commentResult.reason);
-        }
-        
-        if (styleResult.status === 'fulfilled') {
-          console.log('✅ CalTopo styles synced successfully');
-        } else {
-          console.error('❌ CalTopo styles sync failed:', styleResult.reason);
-        }
-      });
-    }
     
     submitDailyPlanMutation.mutate({
       planDate: normalizedDate,
@@ -687,7 +733,7 @@ const Dashboard = React.memo(function Dashboard() {
       statusSnapshot,
       notes: planNotes,
     });
-  };
+  }, [existingDailyPlan, showOverrideOption, filteredRuns, currentDate, submitDailyPlanMutation, toast]);
 
 
   // Don't render until date is loaded to prevent hydration issues
