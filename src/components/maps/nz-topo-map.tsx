@@ -43,10 +43,10 @@ interface AvalancheFeature {
 }
 
 interface NZTopoMapProps {
-  areaId: string;
-  subAreaId?: string;
-  selectedRunId?: string;
-  hoveredRunId?: string;
+  areaId?: string | null;
+  subAreaId?: string | null;
+  selectedRunId?: string | null;
+  hoveredRunId?: string | null;
   onClose?: () => void;
   // New props for avalanche features
   showAvalanchePaths?: boolean;
@@ -63,20 +63,34 @@ interface NZTopoMapProps {
 interface RunData {
   id: string;
   name: string;
-  runNumber: number;
-  status: 'open' | 'conditional' | 'closed';
-  gpxPath: string;
   subAreaId: string;
+  runNumber: number;
+  runDescription?: string | null;
+  runNotes?: string | null;
+  aspect: "N" | "NE" | "E" | "SE" | "S" | "SW" | "W" | "NW";
+  elevationMax: number;
+  elevationMin: number;
+  status: 'open' | 'conditional' | 'closed';
+  statusComment?: string | null;
+  gpxPath?: string | null;
+  runPhoto?: string | null;
+  avalanchePhoto?: string | null;
+  additionalPhotos: string[] | null;
+  caltopoMapId?: string | null;
+  caltopoFeatureId?: string | null;
+  gpxUpdatedAt?: Date | null;
+  lastUpdated: Date;
+  createdAt: Date;
   gpxData?: FeatureCollection<LineString>;
 }
 
-const STATUS_COLORS = {
+const _STATUS_COLORS = {
   open: '#22c55e',
   conditional: '#f59e0b',
-  closed: '#ef4444'
+  closed: '#dc2626' // More vibrant red
 };
 
-const STATUS_OPACITY = {
+const _STATUS_OPACITY = {
   normal: 0.8,
   highlighted: 1.0
 };
@@ -169,17 +183,16 @@ const NZTopoMap = React.memo(function NZTopoMap({
   operationsFeatures: propOperationsFeatures = [],
 }: NZTopoMapProps) {
   const mapRef = useRef<MapRef>(null);
-  const gpxCache = useRef<Record<string, FeatureCollection<LineString>>>({});
   const [viewState, setViewState] = useState({
-    longitude: 174.0,
-    latitude: -41.0,
-    zoom: 8, // Start with a wider view
+    longitude: 170.5, // Focus on South Island
+    latitude: -44.0,  // Southern Alps region
+    zoom: 7, // Good overview of South Island
     bearing: 0,
     pitch: 0
   });
   const [highlightedRunId] = useState<string | null>(null);
   const [runs, setRuns] = useState<RunData[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [_loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [mapError, setMapError] = useState<string | null>(null);
   const [useNZTopo, setUseNZTopo] = useState(true);
@@ -191,23 +204,32 @@ const NZTopoMap = React.memo(function NZTopoMap({
   const [_avalancheError, setAvalancheError] = useState<string | null>(null);
   const [selectedAvalancheFeature, setSelectedAvalancheFeature] = useState<AvalancheFeature | null>(null);
   const [isAvalancheModalOpen, setIsAvalancheModalOpen] = useState(false);
+  const avalancheFetchedRef = useRef(false);
+
+  // Filter runs with GPX data for rendering (NO FILTERING - show all runs)
+  const runsWithData = runs.filter(run => run.gpxData);
   
   // Operations state
   const [operationsFeatures, setOperationsFeatures] = useState<AvalancheFeature[]>(propOperationsFeatures);
   const [_operationsLoading, setOperationsLoading] = useState(false);
   const [_operationsError, setOperationsError] = useState<string | null>(null);
+  const operationsFetchedRef = useRef(false);
 
   // Fetch ALL runs for the area (not filtered by subAreaId) - skip for avalanche paths
+  // If no areaId provided, load all runs for overview
   const { data: runsData, isLoading, error: fetchError } = useRunsForArea(
-    areaId === 'avalanche-paths' ? '' : areaId
+    areaId === 'avalanche-paths' ? '' : (areaId || 'all')
   );
+
+  const gpxCache = useRef<Record<string, FeatureCollection<LineString>>>({});
 
   // Fetch avalanche features when showAvalanchePaths is true
   useEffect(() => {
-    if (showAvalanchePaths && avalancheFeatures.length === 0) {
+    if (showAvalanchePaths && !avalancheFetchedRef.current) {
       console.log('🔄 Fetching avalanche features from database...');
       setAvalancheLoading(true);
       setAvalancheError(null);
+      avalancheFetchedRef.current = true;
       
       // First get available maps, then try to find avalanche features
       const fetchAvalancheFeatures = async () => {
@@ -262,18 +284,16 @@ const NZTopoMap = React.memo(function NZTopoMap({
       };
       
       fetchAvalancheFeatures();
-    } else if (!showAvalanchePaths) {
-      console.log('🔄 Clearing avalanche features');
-      setAvalancheFeatures([]);
     }
-  }, [showAvalanchePaths, avalancheFeatures.length]);
+  }, [showAvalanchePaths]);
 
   // Fetch operations features when showOperations is true
   useEffect(() => {
-    if (showOperations && operationsFeatures.length === 0) {
+    if (showOperations && !operationsFetchedRef.current) {
       console.log('🔄 Fetching operations features from database...');
       setOperationsLoading(true);
       setOperationsError(null);
+      operationsFetchedRef.current = true;
       
       // First get available maps, then try to find operations features
       const fetchOperationsFeatures = async () => {
@@ -328,11 +348,33 @@ const NZTopoMap = React.memo(function NZTopoMap({
       };
       
       fetchOperationsFeatures();
-    } else if (!showOperations) {
-      console.log('🔄 Clearing operations features');
-      setOperationsFeatures([]);
+    }
+  }, [showOperations]);
+
+  // Clear avalanche features when showAvalanchePaths becomes false
+  useEffect(() => {
+    if (!showAvalanchePaths) {
+      if (avalancheFeatures.length > 0) {
+        console.log('🔄 Clearing avalanche features');
+        setAvalancheFeatures([]);
+      }
+      avalancheFetchedRef.current = false; // Reset ref so features can be fetched again
+    }
+  }, [showAvalanchePaths, avalancheFeatures.length]);
+
+  // Clear operations features when showOperations becomes false
+  useEffect(() => {
+    if (!showOperations) {
+      if (operationsFeatures.length > 0) {
+        console.log('🔄 Clearing operations features');
+        setOperationsFeatures([]);
+      }
+      operationsFetchedRef.current = false; // Reset ref so features can be fetched again
     }
   }, [showOperations, operationsFeatures.length]);
+
+  // Update runs when GPX data is loaded progressively
+  // No longer need complex structure key since we use progressive loading
 
   // Process runs data with GPX caching and memoization
   // Only re-process when the actual run structure changes, not status updates
@@ -430,6 +472,9 @@ const NZTopoMap = React.memo(function NZTopoMap({
     });
   }, [statusUpdateKey, runsData]);
 
+  // Note: GPX data is loaded individually by RunGPXLayer components
+  // No need to update runs state with GPX data
+
   // Cleanup GPX cache on unmount
   useEffect(() => {
     const cache = gpxCache.current;
@@ -462,7 +507,7 @@ const NZTopoMap = React.memo(function NZTopoMap({
   }, [subAreaId, runs]);
 
   // Filter runs with GPX data for rendering (NO FILTERING - show all runs)
-  const runsWithData = runs.filter(run => run.gpxData);
+  // runsWithData no longer needed - using progressive loading
 
   // Convert avalanche features to GeoJSON for rendering
   const avalancheGeoJSON = React.useMemo(() => {
@@ -855,10 +900,10 @@ const NZTopoMap = React.memo(function NZTopoMap({
         setHasInitialized(true);
       } else {
         console.warn('⚠️ No valid coordinates found for avalanche features, using default view');
-        // Set a default view for New Zealand if no valid coordinates
+        // Set a default view for South Island if no valid coordinates
         if (mapRef.current) {
-          mapRef.current.setCenter([174.0, -41.0]);
-          mapRef.current.setZoom(6);
+          mapRef.current.setCenter([170.5, -44.0]);
+          mapRef.current.setZoom(7);
           setHasInitialized(true);
         }
       }
@@ -876,6 +921,13 @@ const NZTopoMap = React.memo(function NZTopoMap({
             duration: 1000
           }
         );
+      } else {
+        // If no GPX bounds, focus on South Island
+        if (mapRef.current) {
+          mapRef.current.setCenter([170.5, -44.0]);
+          mapRef.current.setZoom(7);
+          setHasInitialized(true);
+        }
       }
     }
   }, [runs, hasInitialized, areaId, avalancheFeatures]);
@@ -938,7 +990,7 @@ const NZTopoMap = React.memo(function NZTopoMap({
     );
   }
 
-  if ((isLoading || loading) && areaId !== 'avalanche-paths') {
+  if ((isLoading || _loading) && areaId !== 'avalanche-paths') {
     return (
       <div className="flex items-center justify-center h-full bg-muted/20">
         <div className="flex flex-col items-center space-y-4">
@@ -1050,9 +1102,9 @@ const NZTopoMap = React.memo(function NZTopoMap({
                   id={layerId}
                   type="line"
                   paint={{
-                    'line-color': STATUS_COLORS[run.status],
+                    'line-color': _STATUS_COLORS[run.status],
                     'line-width': isHighlighted ? 5 : 3,
-                    'line-opacity': isHighlighted ? STATUS_OPACITY.highlighted : STATUS_OPACITY.normal
+                    'line-opacity': isHighlighted ? _STATUS_OPACITY.highlighted : _STATUS_OPACITY.normal
                   }}
                   layout={{
                     'line-join': 'round',
@@ -1109,7 +1161,7 @@ const NZTopoMap = React.memo(function NZTopoMap({
                   }}
                   paint={{
                     'text-color': '#ffffff',
-                    'text-halo-color': STATUS_COLORS[run.status],
+                    'text-halo-color': _STATUS_COLORS[run.status],
                     'text-halo-width': 2
                   }}
                 />
@@ -1294,6 +1346,7 @@ const NZTopoMap = React.memo(function NZTopoMap({
           )}
         </Map>
       </div>
+      
       
       {/* Avalanche Feature Modal */}
       <AvalancheFeatureModal

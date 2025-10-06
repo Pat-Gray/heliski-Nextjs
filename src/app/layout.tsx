@@ -6,6 +6,7 @@ import { PrintProvider } from "@/components/print-provider";
 import { AuthProvider } from "@/contexts/auth-context";
 import { ToastProvider } from "@/components/ui/toast-provider";
 import { AppLayout } from "../components/app-layout";
+import ServiceWorkerRegistration from "@/components/service-worker-registration";
 
 export const metadata: Metadata = {
   title: "Heli Ski Run Coding",
@@ -27,6 +28,7 @@ export default function RootLayout({
                 <AppLayout>
                   {children}
                 </AppLayout>
+                <ServiceWorkerRegistration />
               </ToastProvider>
             </PrintProvider>
           </QueryProvider>

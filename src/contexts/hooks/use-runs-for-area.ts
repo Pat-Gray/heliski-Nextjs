@@ -13,6 +13,9 @@ export function useRunsForArea(areaId: string, subAreaId?: string) {
       if (subAreaId) {
         // Filter to only show runs from the specific sub-area
         filteredRuns = data.filter((run: Run) => run.subAreaId === subAreaId);
+      } else if (areaId === 'all') {
+        // Show all runs for overview
+        filteredRuns = data;
       } else {
         // If no sub-area specified, show all runs (for area view)
         filteredRuns = data;
@@ -20,7 +23,7 @@ export function useRunsForArea(areaId: string, subAreaId?: string) {
 
       return filteredRuns;
     },
-    enabled: !!areaId,
+    enabled: !!areaId || areaId === 'all',
     staleTime: 5 * 60 * 1000, // 5 minutes
   });
 }
