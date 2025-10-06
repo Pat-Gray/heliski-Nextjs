@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { StatusCommentAutocomplete } from "@/components/ui/status-comment-autocomplete";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
-import { Mountain,CheckCircle, MapPin, GripVertical, Plus, Printer, Loader2 } from "lucide-react";
+import { Mountain,CheckCircle, MapPin, GripVertical, Plus, Printer, Loader2, Eye } from "lucide-react";
 import { useToast } from "@/contexts/hooks/use-toast";
 import { apiRequest, queryFn } from "@/lib/queryClient";
 import RunDetailView from "@/components/run-detail-view";
@@ -875,14 +875,13 @@ const Dashboard = React.memo(function Dashboard() {
                                     {subAreaRuns.map(run => (
                                       <div 
                                         key={run.id} 
-                                        className={`p-3 border rounded-lg transition-colors cursor-pointer ${
+                                        className={`p-3 border rounded-lg transition-colors ${
                                           run.status === "open" 
-                                            ? "border-green-200 bg-green-50 hover:bg-green-100 hover:border-green-300" 
+                                            ? "border-green-200 bg-green-50" 
                                             : run.status === "conditional" 
-                                            ? "border-orange-200 bg-orange-50 hover:bg-orange-100 hover:border-orange-300" 
-                                            : "border-red-200 bg-red-50 hover:bg-red-100 hover:border-red-300"
+                                            ? "border-orange-200 bg-orange-50" 
+                                            : "border-red-200 bg-red-50"
                                         }`}
-                                        onClick={() => handleViewRunDetails(run)}
                                         onMouseEnter={() => setHoveredRunId(run.id)}
                                         onMouseLeave={() => setHoveredRunId(null)}
                                       >
@@ -896,9 +895,22 @@ const Dashboard = React.memo(function Dashboard() {
                                                 : "bg-red-500"
                                             }`} /> */}
                                             <div className="min-w-0 flex-1">
-                                              <div className="font-medium truncate"><span className="font-light">{`${run.runNumber}   -      `} </span>
-                                                
-                                                 {run.name}</div>
+                                              <div className="font-medium truncate flex items-center gap-2">
+                                                <span className="font-light">{`${run.runNumber}   -      `} </span>
+                                                {run.name}
+                                                <Button
+                                                  size="sm"
+                                                  variant="outline"
+                                                  onClick={(e) => {
+                                                    e.stopPropagation();
+                                                    handleViewRunDetails(run);
+                                                  }}
+                                                  className="h-7 px-2 hover:bg-gray-100"
+                                                >
+                                                  <Eye className="h-3 w-3 mr-1" />
+                                                  View Run
+                                                </Button>
+                                              </div>
                                               <div className="text-sm text-muted-foreground truncate">
                                                 {run.aspect} • {run.elevationMax}-{run.elevationMin}m
                                               </div>
