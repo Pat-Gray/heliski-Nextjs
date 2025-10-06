@@ -264,41 +264,41 @@ export default function RunDetailView({ runId }: RunDetailViewProps) {
   };
 
   // Remove additional photo handler
-  const handleRemovePhoto = async (index: number) => {
-    try {
-      const updatedPhotos = selectedRun.additionalPhotos?.filter((_, i) => i !== index) || [];
-      const response = await fetch(`/api/runs/${selectedRun.id}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ additionalPhotos: updatedPhotos }),
-      });
-      if (response.ok) {
-        queryClient.invalidateQueries({ queryKey: ['/api/runs'] });
+  // const handleRemovePhoto = async (index: number) => {
+  //   try {
+  //     const updatedPhotos = selectedRun.additionalPhotos?.filter((_, i) => i !== index) || [];
+  //     const response = await fetch(`/api/runs/${selectedRun.id}`, {
+  //       method: 'PATCH',
+  //       headers: { 'Content-Type': 'application/json' },
+  //       body: JSON.stringify({ additionalPhotos: updatedPhotos }),
+  //     });
+  //     if (response.ok) {
+  //       queryClient.invalidateQueries({ queryKey: ['/api/runs'] });
         
-        // Sync images to CalTopo if run is linked
-        if (selectedRun.caltopoMapId && selectedRun.caltopoFeatureId) {
-          try {
-            const syncResponse = await fetch('/api/caltopo/sync-images-to-caltopo', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ runId: selectedRun.id })
-            });
+  //       // Sync images to CalTopo if run is linked
+  //       if (selectedRun.caltopoMapId && selectedRun.caltopoFeatureId) {
+  //         try {
+  //           const syncResponse = await fetch('/api/caltopo/sync-images-to-caltopo', {
+  //             method: 'POST',
+  //             headers: { 'Content-Type': 'application/json' },
+  //             body: JSON.stringify({ runId: selectedRun.id })
+  //           });
             
-            if (syncResponse.ok) {
-              const syncResult = await syncResponse.json();
-              console.log('✅ Images synced to CalTopo:', syncResult);
-            } else {
-              console.error('❌ Failed to sync images to CalTopo');
-            }
-          } catch (syncError) {
-            console.error('❌ Error syncing images to CalTopo:', syncError);
-          }
-        }
-      }
-    } catch (error) {
-      console.error('Failed to remove photo:', error);
-    }
-  };
+  //           if (syncResponse.ok) {
+  //             const syncResult = await syncResponse.json();
+  //             console.log('✅ Images synced to CalTopo:', syncResult);
+  //           } else {
+  //             console.error('❌ Failed to sync images to CalTopo');
+  //           }
+  //         } catch (syncError) {
+  //           console.error('❌ Error syncing images to CalTopo:', syncError);
+  //         }
+  //       }
+  //     }
+  //   } catch (error) {
+  //     console.error('Failed to remove photo:', error);
+  //   }
+  // };
 
   return (
     <div className="h-full flex flex-col bg-gray-50">
@@ -569,7 +569,7 @@ export default function RunDetailView({ runId }: RunDetailViewProps) {
                                     onClick={() => handleImageClick(imageUrl)}
                                   />
                                 </div>
-                                <Button
+                                {/* <Button
                                   variant="destructive"
                                   size="sm"
                                   className="absolute top-2 right-2 h-6 w-6 p-0 opacity-0 group-hover:opacity-100 transition-opacity"
@@ -580,7 +580,7 @@ export default function RunDetailView({ runId }: RunDetailViewProps) {
                                   aria-label={`Remove ${imageTitle}`}
                                 >
                                   <X className="h-3 w-3" />
-                                </Button>
+                                </Button> */}
                               </div>
                             );
                           })

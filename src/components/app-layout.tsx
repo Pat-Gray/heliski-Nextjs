@@ -314,12 +314,12 @@ export function AppLayout({ children }: AppLayoutProps) {
             <SidebarGroup>
               <SidebarGroupLabel>Admin</SidebarGroupLabel>
               <SidebarGroupContent>
-                <Button variant="ghost" className="w-full justify-start" asChild>
+                {/* <Button variant="ghost" className="w-full justify-start" asChild>
                   <a href="/admin/users">
                     <Shield className="h-4 w-4 mr-2 text-sm" />
                     User Management
                   </a>
-                </Button>
+                </Button> */}
               </SidebarGroupContent>
             </SidebarGroup>
           )}

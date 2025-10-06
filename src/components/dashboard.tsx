@@ -40,7 +40,6 @@ const Dashboard = React.memo(function Dashboard() {
   const [showConfirmationModal, setShowConfirmationModal] = useState(false);
   const [existingDailyPlan, setExistingDailyPlan] = useState<{ id: string } | null>(null);
   const [showOverrideOption, setShowOverrideOption] = useState(false);
-  const [showMap, setShowMap] = useState(true); // Start with map visible
   const [selectedAreaForMap, setSelectedAreaForMap] = useState<string | null>(null);
   const [selectedSubAreaForMap, setSelectedSubAreaForMap] = useState<string | null>(null);
   const [showAvalanchePaths, setShowAvalanchePaths] = useState(false);
@@ -114,7 +113,6 @@ const Dashboard = React.memo(function Dashboard() {
     updateTimeoutsRef.current = {};
   }, [selectedAreas]);
 
-
   const { data: runs = [] } = useQuery<Run[]>({
     queryKey: ["/api/runs"],
     queryFn: () => queryFn("/api/runs"),
@@ -144,21 +142,24 @@ const Dashboard = React.memo(function Dashboard() {
     const newSelected = new Set(selectedAreas);
     if (newSelected.has(areaId)) {
       newSelected.delete(areaId);
-      // If this was the only selected area, keep map visible but clear selection
-      if (newSelected.size === 0) {
-        setSelectedAreaForMap(null);
-        setSelectedSubAreaForMap(null);
-      } else if (selectedAreaForMap === areaId) {
-        // If this was the map area, switch to another selected area
-        const remainingArea = areas.find(area => newSelected.has(area.id));
-        if (remainingArea) {
-          setSelectedAreaForMap(remainingArea.id);
+      // If this was the map area, switch to another selected area or clear selection
+      if (selectedAreaForMap === areaId) {
+        if (newSelected.size > 0) {
+          // Switch to another selected area
+          const remainingArea = areas.find(area => newSelected.has(area.id));
+          if (remainingArea) {
+            setSelectedAreaForMap(remainingArea.id);
+          }
+        } else {
+          // No areas selected, clear map selection but keep map visible
+          setSelectedAreaForMap(null);
+          setSelectedSubAreaForMap(null);
         }
       }
     } else {
       newSelected.add(areaId);
+      // Set this area for the map (map is always visible)
       setSelectedAreaForMap(areaId);
-      setShowMap(true);
     }
     setSelectedAreas(newSelected);
     
@@ -175,7 +176,7 @@ const Dashboard = React.memo(function Dashboard() {
     if (subArea) {
       setSelectedAreaForMap(subArea.areaId);
       setSelectedSubAreaForMap(subAreaId);
-      setShowMap(true);
+      // Map is always visible, no need to set showMap
     }
   };
 
@@ -186,7 +187,7 @@ const Dashboard = React.memo(function Dashboard() {
 
   // Memoized onClose function to prevent map re-renders
   const handleMapClose = useCallback(() => {
-    setShowMap(false);
+    // Don't hide the map, just clear the selection
     setSelectedAreaForMap(null);
     setSelectedSubAreaForMap(null);
   }, []);
@@ -1021,77 +1022,53 @@ const Dashboard = React.memo(function Dashboard() {
           className="flex flex-col min-h-0 flex-1"
           style={{ width: isLargeScreen ? `${100 - leftPanelWidth}%` : '100%' }}
         >
-          {showMap ? (
-            <>
-              {/* Map - Only visible on xl screens and up (1280px+) */}
-              <div className="hidden xl:block h-full w-full flex-1 relative">
-                {/* Map Toggle Buttons */}
-                <div className="absolute top-4 right-4 z-10 flex gap-2">
-                  <Button
-                    variant={showAvalanchePaths ? "default" : "outline"}
-                    size="sm"
-                    onClick={() => {
-                      console.log('🔄 Toggling avalanche paths:', !showAvalanchePaths);
-                      setShowAvalanchePaths(!showAvalanchePaths);
-                    }}
-                    className="shadow-lg"
-                  >
-                    <Mountain className="w-4 h-4 mr-2" />
-                    Avalanche Paths
-                  </Button>
-                  <Button
-                    variant={showOperations ? "default" : "outline"}
-                    size="sm"
-                    onClick={() => {
-                      console.log('🔄 Toggling operations:', !showOperations);
-                      setShowOperations(!showOperations);
-                    }}
-                    className="shadow-lg"
-                  >
-                    <MapPin className="w-4 h-4 mr-2" />
-                    Operations
-                  </Button>
-                </div>
-                
-                {selectedAreaForMap ? (
-                  <NZTopoMap
-                    areaId={selectedAreaForMap}
-                    subAreaId={selectedSubAreaForMap ?? undefined}
-                    selectedRunId={selectedRunId ?? undefined}
-                    hoveredRunId={hoveredRunId ?? undefined}
-                    showAvalanchePaths={showAvalanchePaths}
-                    showOperations={showOperations}
-                    onClose={handleMapClose}
-                  />
-                ) : (
-                  <div className="h-full w-full flex items-center justify-center bg-muted/20">
-                    <div className="flex flex-col items-center space-y-4 text-center">
-                      <Mountain className="h-12 w-12 text-muted-foreground" />
-                      <div>
-                        <p className="text-lg font-medium">Select an Area</p>
-                        <p className="text-sm text-muted-foreground">Choose an area from the left panel to view the map</p>
-                      </div>
-                    </div>
-                  </div>
-                )}
-              </div>
-              {/* Run Detail View - Visible on screens below xl (below 1280px) */}
-              <div className="xl:hidden h-full w-full overflow-y-auto flex-1">
-                <RunDetailView 
-                  runId={selectedRunId} 
-                  focusStatusComment={focusStatusComment}
-                />
-              </div>
-            </>
-          ) : (
-            /* Run Detail View - Always visible when map is not shown */
-            <div className="h-full w-full overflow-y-auto flex-1">
-              <RunDetailView 
-                runId={selectedRunId} 
-                focusStatusComment={focusStatusComment}
-              />
+          {/* Map - Only visible on xl screens and up (1280px+) */}
+          <div className="hidden xl:block h-full w-full flex-1 relative">
+            {/* Map Toggle Buttons */}
+            <div className="absolute top-4 right-4 z-10 flex gap-2">
+              <Button
+                variant={showAvalanchePaths ? "default" : "outline"}
+                size="sm"
+                onClick={() => {
+                  console.log('🔄 Toggling avalanche paths:', !showAvalanchePaths);
+                  setShowAvalanchePaths(!showAvalanchePaths);
+                }}
+                className="shadow-lg"
+              >
+                <Mountain className="w-4 h-4 mr-2" />
+                Avalanche Paths
+              </Button>
+              <Button
+                variant={showOperations ? "default" : "outline"}
+                size="sm"
+                onClick={() => {
+                  console.log('🔄 Toggling operations:', !showOperations);
+                  setShowOperations(!showOperations);
+                }}
+                className="shadow-lg"
+              >
+                <MapPin className="w-4 h-4 mr-2" />
+                Operations
+              </Button>
             </div>
-          )}
+            
+            <NZTopoMap
+              areaId={selectedAreaForMap ?? ''}
+              subAreaId={selectedSubAreaForMap ?? ''}
+              selectedRunId={selectedRunId ?? ''}
+              hoveredRunId={hoveredRunId ?? ''}
+              showAvalanchePaths={showAvalanchePaths}
+              showOperations={showOperations}
+              onClose={handleMapClose}
+            />
+          </div>
+          {/* Run Detail View - Visible on screens below xl (below 1280px) */}
+          <div className="xl:hidden h-full w-full overflow-y-auto flex-1">
+            <RunDetailView 
+              runId={selectedRunId} 
+              focusStatusComment={focusStatusComment}
+            />
+          </div>
         </div>
       </main>
 
