@@ -123,15 +123,42 @@ const Dashboard = React.memo(function Dashboard() {
     queryFn: () => queryFn("/api/areas"),
   });
 
+  // Background prefetching - start loading runs for all areas after 2 seconds
+  useEffect(() => {
+    if (areas.length === 0) return;
+
+    const prefetchTimer = setTimeout(() => {
+      console.log('🚀 Starting background prefetch of runs for all areas...');
+      
+      areas.forEach(area => {
+        // Prefetch runs for this area
+        queryClient.prefetchQuery({
+          queryKey: ["/api/runs", new Set([area.id])],
+          queryFn: () => queryFn("/api/runs"),
+          staleTime: 10 * 60 * 1000, // 10 minutes
+        });
+      });
+    }, 2000); // Start after 2 seconds
+
+    return () => clearTimeout(prefetchTimer);
+  }, [areas, queryClient]);
+
   const { data: subAreas = [] } = useQuery<SubArea[]>({
     queryKey: ["/api/sub-areas"],
     queryFn: () => queryFn("/api/sub-areas"),
   });
 
+  // Get run counts for each area (lightweight query)
+  const { data: areaRunCounts = {} } = useQuery<Record<string, number>>({
+    queryKey: ["/api/runs/counts"],
+    queryFn: () => queryFn("/api/runs/counts"),
+    staleTime: 5 * 60 * 1000, // 5 minutes
+  });
+
   // Filter runs based on selected areas
   const filteredRuns = useMemo(() => {
+    if (selectedAreas.size === 0) return []; // Don't show any runs if no areas selected
     return runs.filter(run => {
-      if (selectedAreas.size === 0) return true; // Show all runs if no areas selected
       const subArea = subAreas.find(sa => sa.id === run.subAreaId);
       return subArea && selectedAreas.has(subArea.areaId);
     });
@@ -272,32 +299,9 @@ const Dashboard = React.memo(function Dashboard() {
       // The optimistic update already reflects the latest state
     },
     onSuccess: async (data, variables) => {
-      // Sync to CalTopo if this is a status change
-      const updatedRun = filteredRuns.find(run => run.id === variables.runId);
-      if (updatedRun && updatedRun.caltopoMapId && updatedRun.caltopoFeatureId) {
-        try {
-          // Create a mock run object with the updated status for CalTopo sync
-          const runForSync = {
-            ...updatedRun,
-            status: variables.status as 'open' | 'conditional' | 'closed',
-            statusComment: variables.statusComment || null
-          };
-          
-          // Sync both comments and styles to CalTopo in the background
-          const syncPromises = [];
-          
-          // Always sync comments for status changes (to clear or add status comments)
-          syncPromises.push(syncCalTopoComments([runForSync]));
-          
-          // Always sync styles for status changes
-          syncPromises.push(syncCalTopoStyles());
-          
-          await Promise.allSettled(syncPromises);
-          console.log(`✅ Synced status update to CalTopo for run ${updatedRun.name} (${variables.status})`);
-        } catch (error) {
-          console.error(`❌ Failed to sync status update to CalTopo for run ${updatedRun.name}:`, error);
-        }
-      }
+      // Status changes are now only saved locally until daily plan submission
+      // CalTopo sync will happen when the daily plan is submitted
+      console.log(`✅ Run status updated locally: ${variables.runId} -> ${variables.status}`);
     },
   });
 
@@ -802,6 +806,11 @@ const Dashboard = React.memo(function Dashboard() {
                               <h4 className="font-medium">{area.name}</h4>
                               <p className="text-sm text-muted-foreground">
                                 {subAreas.filter(sa => sa.areaId === area.id).length} sub-areas
+                                {areaRunCounts[area.id] && (
+                                  <span className="ml-2 text-primary font-medium">
+                                    • {areaRunCounts[area.id]} runs
+                                  </span>
+                                )}
                               </p>
                             </div>
                           </div>

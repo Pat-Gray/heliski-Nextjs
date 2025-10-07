@@ -7,7 +7,10 @@
     "build": "next build --turbopack",
     "start": "next start",
     "lint": "eslint",
-    "db:seed": "tsx scripts/seed.ts"
+    "db:seed": "tsx scripts/seed.ts",
+    "db:generate-dummy": "node scripts/run-dummy-data.js",
+    "db:test-gpx": "node scripts/test-gpx-access.js",
+    "db:fix-gpx-urls": "node scripts/fix-gpx-urls.js"
   },
   "dependencies": {
     "@radix-ui/react-checkbox": "^1.3.3",

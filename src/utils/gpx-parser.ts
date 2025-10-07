@@ -26,6 +26,15 @@ export interface ParsedGPX {
 
 export function parseGPX(gpxContent: string): ParsedGPX {
   try {
+    // Validate input
+    if (!gpxContent || typeof gpxContent !== 'string') {
+      throw new Error('Invalid GPX content: empty or not a string');
+    }
+    
+    if (gpxContent.length < 100) {
+      throw new Error('Invalid GPX content: too short to be valid GPX');
+    }
+    
     // Parsing GPX content
     const parser = new DOMParser();
     const doc = parser.parseFromString(gpxContent, 'text/xml');
@@ -36,94 +45,141 @@ export function parseGPX(gpxContent: string): ParsedGPX {
       throw new Error(`GPX parsing error: ${parseError.textContent}`);
     }
     
+    // Validate GPX structure
+    if (!doc.querySelector('gpx')) {
+      throw new Error('Invalid GPX: missing root gpx element');
+    }
+    
+    // Check if GPX has any track or route data
+    const hasTracks = doc.querySelectorAll('trk').length > 0;
+    const hasRoutes = doc.querySelectorAll('rte').length > 0;
+    
+    if (!hasTracks && !hasRoutes) {
+      throw new Error('Invalid GPX: no tracks or routes found');
+    }
+    
     const tracks: GPXTrack[] = [];
     let minLat = Infinity;
     let maxLat = -Infinity;
     let minLon = Infinity;
     let maxLon = -Infinity;
 
-  // Parse tracks
-  const trackElements = doc.querySelectorAll('trk');
-  trackElements.forEach((trackElement, index) => {
-    const trackName = trackElement.querySelector('name')?.textContent || `Track ${index + 1}`;
-    const points: GPXPoint[] = [];
+    // Parse tracks
+    const trackElements = doc.querySelectorAll('trk');
+    trackElements.forEach((trackElement, index) => {
+      try {
+        const trackName = trackElement.querySelector('name')?.textContent || `Track ${index + 1}`;
+        const points: GPXPoint[] = [];
 
-    const trackPoints = trackElement.querySelectorAll('trkpt');
-    trackPoints.forEach(pointElement => {
-      const lat = parseFloat(pointElement.getAttribute('lat') || '0');
-      const lon = parseFloat(pointElement.getAttribute('lon') || '0');
-      const eleElement = pointElement.querySelector('ele');
-      const timeElement = pointElement.querySelector('time');
-      
-      const point: GPXPoint = {
-        lat,
-        lon,
-        ele: eleElement ? parseFloat(eleElement.textContent || '0') : undefined,
-        time: timeElement?.textContent
-      };
+        const trackPoints = trackElement.querySelectorAll('trkpt');
+        trackPoints.forEach(pointElement => {
+          try {
+            const lat = parseFloat(pointElement.getAttribute('lat') || '0');
+            const lon = parseFloat(pointElement.getAttribute('lon') || '0');
+            
+            // Validate coordinates
+            if (isNaN(lat) || isNaN(lon) || lat < -90 || lat > 90 || lon < -180 || lon > 180) {
+              console.warn(`Invalid coordinates in track ${index + 1}: lat=${lat}, lon=${lon}`);
+              return; // Skip this point
+            }
+            
+            const eleElement = pointElement.querySelector('ele');
+            const timeElement = pointElement.querySelector('time');
+            
+            const point: GPXPoint = {
+              lat,
+              lon,
+              ele: eleElement ? parseFloat(eleElement.textContent || '0') : undefined,
+              time: timeElement?.textContent
+            };
 
-      points.push(point);
+            points.push(point);
 
-      // Update bounds
-      minLat = Math.min(minLat, lat);
-      maxLat = Math.max(maxLat, lat);
-      minLon = Math.min(minLon, lon);
-      maxLon = Math.max(maxLon, lon);
+            // Update bounds
+            minLat = Math.min(minLat, lat);
+            maxLat = Math.max(maxLat, lat);
+            minLon = Math.min(minLon, lon);
+            maxLon = Math.max(maxLon, lon);
+          } catch (pointError) {
+            console.warn(`Error parsing track point in track ${index + 1}:`, pointError);
+            // Continue processing other points
+          }
+        });
+
+        if (points.length > 0) {
+          tracks.push({
+            name: trackName,
+            points,
+            color: getTrackColor(index),
+            runNumber: index + 1
+          });
+        }
+      } catch (trackError) {
+        console.warn(`Error parsing track ${index + 1}:`, trackError);
+        // Continue processing other tracks
+      }
     });
-
-    if (points.length > 0) {
-      tracks.push({
-        name: trackName,
-        points,
-        color: getTrackColor(index),
-        runNumber: index + 1
-      });
-    }
-  });
 
   // Parse routes if no tracks found
   if (tracks.length === 0) {
     const routeElements = doc.querySelectorAll('rte');
     routeElements.forEach((routeElement, index) => {
-      const routeName = routeElement.querySelector('name')?.textContent || `Route ${index + 1}`;
-      const points: GPXPoint[] = [];
+      try {
+        const routeName = routeElement.querySelector('name')?.textContent || `Route ${index + 1}`;
+        const points: GPXPoint[] = [];
 
-      const routePoints = routeElement.querySelectorAll('rtept');
-      routePoints.forEach(pointElement => {
-        const lat = parseFloat(pointElement.getAttribute('lat') || '0');
-        const lon = parseFloat(pointElement.getAttribute('lon') || '0');
-        const eleElement = pointElement.querySelector('ele');
-        const timeElement = pointElement.querySelector('time');
-        
-        const point: GPXPoint = {
-          lat,
-          lon,
-          ele: eleElement ? parseFloat(eleElement.textContent || '0') : undefined,
-          time: timeElement?.textContent
-        };
+        const routePoints = routeElement.querySelectorAll('rtept');
+        routePoints.forEach(pointElement => {
+          try {
+            const lat = parseFloat(pointElement.getAttribute('lat') || '0');
+            const lon = parseFloat(pointElement.getAttribute('lon') || '0');
+            
+            // Validate coordinates
+            if (isNaN(lat) || isNaN(lon) || lat < -90 || lat > 90 || lon < -180 || lon > 180) {
+              console.warn(`Invalid coordinates in route ${index + 1}: lat=${lat}, lon=${lon}`);
+              return; // Skip this point
+            }
+            
+            const eleElement = pointElement.querySelector('ele');
+            const timeElement = pointElement.querySelector('time');
+            
+            const point: GPXPoint = {
+              lat,
+              lon,
+              ele: eleElement ? parseFloat(eleElement.textContent || '0') : undefined,
+              time: timeElement?.textContent
+            };
 
-        points.push(point);
+            points.push(point);
 
-        // Update bounds
-        minLat = Math.min(minLat, lat);
-        maxLat = Math.max(maxLat, lat);
-        minLon = Math.min(minLon, lon);
-        maxLon = Math.max(maxLon, lon);
-      });
-
-      if (points.length > 0) {
-        tracks.push({
-          name: routeName,
-          points,
-          color: getTrackColor(index),
-          runNumber: index + 1
+            // Update bounds
+            minLat = Math.min(minLat, lat);
+            maxLat = Math.max(maxLat, lat);
+            minLon = Math.min(minLon, lon);
+            maxLon = Math.max(maxLon, lon);
+          } catch (pointError) {
+            console.warn(`Error parsing route point in route ${index + 1}:`, pointError);
+            // Continue processing other points
+          }
         });
+
+        if (points.length > 0) {
+          tracks.push({
+            name: routeName,
+            points,
+            color: getTrackColor(index),
+            runNumber: index + 1
+          });
+        }
+      } catch (routeError) {
+        console.warn(`Error parsing route ${index + 1}:`, routeError);
+        // Continue processing other routes
       }
     });
   }
 
-    // GPX parsing completed
-    return {
+  // GPX parsing completed
+  return {
       tracks,
       bounds: {
         minLat: minLat === Infinity ? 0 : minLat,
@@ -289,6 +345,7 @@ export async function parseGPXToGeoJSON(
       if (fetchedContent) {
         gpxContent = fetchedContent;
       } else {
+        console.warn(`Failed to fetch GPX file: ${gpxPath}, using sample data`);
         gpxContent = generateSampleGPX(subAreaId, runNumber);
       }
     } else {
@@ -302,12 +359,11 @@ export async function parseGPXToGeoJSON(
     
     return result;
   } catch (error) {
-    console.error('Error parsing GPX to GeoJSON:', {
-      gpxPath,
+    console.warn('Error parsing GPX to GeoJSON, using sample data:', {
+      gpxPath: gpxPath ? gpxPath.substring(0, 100) + '...' : 'none',
       subAreaId,
       runNumber,
-      error: error instanceof Error ? error.message : String(error),
-      stack: error instanceof Error ? error.stack : undefined
+      error: error instanceof Error ? error.message : String(error)
     });
     
     // Return sample data on error

@@ -1,7 +1,9 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import Map, { Source, Layer, MapRef, MapMouseEvent } from 'react-map-gl/mapbox';
 import type { FeatureCollection, LineString, Point } from 'geojson';
-import { useRunsForArea } from '@/contexts/hooks/use-runs-for-area';
+import { useQuery } from '@tanstack/react-query';
+import { queryFn } from '@/lib/queryClient';
+import type { Run } from '@/lib/schemas/schema';
 import { parseGPXToGeoJSON } from '@/utils/gpx-parser';
 import { Loader2, MapPin, AlertTriangle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -170,6 +172,28 @@ const NZTopoMap = React.memo(function NZTopoMap({
 }: NZTopoMapProps) {
   const mapRef = useRef<MapRef>(null);
   const gpxCache = useRef<Record<string, FeatureCollection<LineString>>>({});
+  
+  // Load GPX cache from localStorage on mount
+  useEffect(() => {
+    try {
+      const cached = localStorage.getItem('gpx-cache');
+      if (cached) {
+        gpxCache.current = JSON.parse(cached);
+        console.log('📦 Loaded GPX cache from localStorage:', Object.keys(gpxCache.current).length, 'entries');
+      }
+    } catch (error) {
+      console.warn('Failed to load GPX cache from localStorage:', error);
+    }
+  }, []);
+  
+  // Save GPX cache to localStorage when it updates
+  const saveGPXCache = useCallback(() => {
+    try {
+      localStorage.setItem('gpx-cache', JSON.stringify(gpxCache.current));
+    } catch (error) {
+      console.warn('Failed to save GPX cache to localStorage:', error);
+    }
+  }, []);
   const [viewState, setViewState] = useState({
     longitude: 174.0,
     latitude: -41.0,
@@ -197,10 +221,18 @@ const NZTopoMap = React.memo(function NZTopoMap({
   const [_operationsLoading, setOperationsLoading] = useState(false);
   const [_operationsError, setOperationsError] = useState<string | null>(null);
 
-  // Fetch ALL runs for the area (not filtered by subAreaId) - skip for avalanche paths
-  const { data: runsData, isLoading, error: fetchError } = useRunsForArea(
-    areaId === 'avalanche-paths' ? '' : areaId
-  );
+  // Fetch all runs and filter by area
+  const { data: allRuns = [], isLoading, error: fetchError } = useQuery<Run[]>({
+    queryKey: ["/api/runs"],
+    queryFn: () => queryFn("/api/runs"),
+  });
+
+  // Filter runs by area (simplified for now - just return all runs)
+  const runsData = useMemo(() => {
+    if (areaId === 'avalanche-paths') return [];
+    return allRuns;
+  }, [allRuns, areaId]);
+
 
   // Fetch avalanche features when showAvalanchePaths is true
   useEffect(() => {
@@ -342,45 +374,65 @@ const NZTopoMap = React.memo(function NZTopoMap({
   }, [runsData]);
 
   useEffect(() => {
-    if (!runsData || !Array.isArray(runsData)) return;
+    if (!runsData || !Array.isArray(runsData)) {
+      return;
+    }
 
     const processRuns = async () => {
       setLoading(true);
       setError(null);
 
       try {
-        // Process runs in parallel for better performance
-        const runPromises = runsData.map(async (run) => {
-          if (!run) return null;
+        const BATCH_SIZE = 10;
+        const processedRuns: RunData[] = [];
+        
+        // Process runs in batches to prevent browser freeze
+        for (let i = 0; i < runsData.length; i += BATCH_SIZE) {
+          const batch = runsData.slice(i, i + BATCH_SIZE);
+          
+          const batchPromises = batch.map(async (run) => {
+            if (!run) return null;
 
-          const cacheKey = `${run.gpxPath || ''}-${run.subAreaId || ''}-${run.runNumber || 0}`;
+            const cacheKey = `${run.gpxPath || ''}-${run.subAreaId || ''}-${run.runNumber || 0}`;
+            
+            let gpxData: FeatureCollection<LineString>;
+            
+            // Check cache first
+            if (gpxCache.current[cacheKey]) {
+              gpxData = gpxCache.current[cacheKey];
+            } else {
+              // Fetch and cache GPX data
+              gpxData = await parseGPXToGeoJSON(run.gpxPath || '', run.subAreaId, run.runNumber);
+              gpxCache.current[cacheKey] = gpxData;
+              
+              // Save to localStorage cache
+              saveGPXCache();
+            }
+
+            return {
+              id: run.id || '',
+              name: run.name || '',
+              runNumber: run.runNumber || 0,
+              status: (run.status as 'open' | 'conditional' | 'closed') || 'open',
+              gpxPath: run.gpxPath || '',
+              subAreaId: run.subAreaId || '',
+              gpxData
+            } as RunData;
+          });
+
+          const batchResults = await Promise.all(batchPromises);
+          const validBatchResults = batchResults.filter((run): run is RunData => run !== null);
           
-          let gpxData: FeatureCollection<LineString>;
+          processedRuns.push(...validBatchResults);
           
-          // Check cache first
-          if (gpxCache.current[cacheKey]) {
-            gpxData = gpxCache.current[cacheKey];
-          } else {
-            // Fetch and cache GPX data
-            gpxData = await parseGPXToGeoJSON(run.gpxPath || '', run.subAreaId, run.runNumber);
-            gpxCache.current[cacheKey] = gpxData;
+          // Update UI progressively as each batch completes
+          setRuns([...processedRuns]);
+          
+          // Small delay between batches to keep browser responsive
+          if (i + BATCH_SIZE < runsData.length) {
+            await new Promise(resolve => setTimeout(resolve, 100));
           }
-
-          return {
-            id: run.id || '',
-            name: run.name || '',
-            runNumber: run.runNumber || 0,
-            status: (run.status as 'open' | 'conditional' | 'closed') || 'open',
-            gpxPath: run.gpxPath || '',
-            subAreaId: run.subAreaId || '',
-            gpxData
-          } as RunData;
-        });
-
-        const results = await Promise.all(runPromises);
-        const processedRuns = results.filter((run): run is RunData => run !== null);
-
-        setRuns(processedRuns);
+        }
         
         // Initial overview zoom - show ALL GPX files
         if (processedRuns.length > 0 && !hasInitialized) {
@@ -404,7 +456,7 @@ const NZTopoMap = React.memo(function NZTopoMap({
     };
 
     processRuns();
-  }, [runsStructureKey, hasInitialized, runsData]);
+  }, [runsStructureKey, hasInitialized, runsData, saveGPXCache]);
 
   // Update run status without re-processing GPX data
   // Only update when status changes, not when runsData structure changes
@@ -413,13 +465,25 @@ const NZTopoMap = React.memo(function NZTopoMap({
     return runsData.map(run => `${run.id}-${run.status}`).join('|');
   }, [runsData]);
 
+  // Debug logging for status updates
+  useEffect(() => {
+    if (runsData && runsData.length > 0) {
+      console.log('🗺️ Map received runs data update:', runsData.length, 'runs');
+      console.log('🗺️ Status update key:', statusUpdateKey);
+      console.log('🗺️ Sample run statuses:', runsData.slice(0, 3).map(r => ({ id: r.id, status: r.status })));
+    }
+  }, [runsData, statusUpdateKey]);
+
   useEffect(() => {
     if (!runsData || !Array.isArray(runsData)) return;
     
+    console.log('🗺️ Updating run statuses, statusUpdateKey:', statusUpdateKey);
+    
     setRuns(currentRuns => {
-      return currentRuns.map(currentRun => {
+      const updatedRuns = currentRuns.map(currentRun => {
         const updatedRun = runsData.find(run => run.id === currentRun.id);
-        if (updatedRun) {
+        if (updatedRun && updatedRun.status !== currentRun.status) {
+          console.log('🗺️ Updating run status:', currentRun.id, currentRun.status, '->', updatedRun.status);
           return {
             ...currentRun,
             status: (updatedRun.status as 'open' | 'conditional' | 'closed') || 'open'
@@ -427,6 +491,9 @@ const NZTopoMap = React.memo(function NZTopoMap({
         }
         return currentRun;
       });
+      
+      console.log('🗺️ Updated runs count:', updatedRuns.length);
+      return updatedRuns;
     });
   }, [statusUpdateKey, runsData]);
 

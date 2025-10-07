@@ -4,23 +4,27 @@ import { queryFn } from '@/lib/queryClient';
 
 export function useRunsForArea(areaId: string, subAreaId?: string) {
   return useQuery<Run[]>({
-    queryKey: ['/api/runs'],
-    queryFn: () => queryFn('/api/runs'),
-    select: (data: Run[]) => {
-      // Filter runs by sub-area if specified, otherwise by area
-      let filteredRuns = data;
+    queryKey: ['/api/runs/by-area', areaId, subAreaId],
+    queryFn: async () => {
+      if (!areaId) return [];
       
-      if (subAreaId) {
-        // Filter to only show runs from the specific sub-area
-        filteredRuns = data.filter((run: Run) => run.subAreaId === subAreaId);
-      } else {
-        // If no sub-area specified, show all runs (for area view)
-        filteredRuns = data;
+      // Fetch runs for specific area from API
+      const response = await fetch(`/api/runs/by-area?areaId=${areaId}`);
+      if (!response.ok) {
+        throw new Error('Failed to fetch runs for area');
       }
-
-      return filteredRuns;
+      
+      const data = await response.json();
+      let runs = data.runs || [];
+      
+      // If subAreaId is specified, filter by sub-area
+      if (subAreaId) {
+        runs = runs.filter((run: Run) => run.subAreaId === subAreaId);
+      }
+      
+      return runs;
     },
     enabled: !!areaId,
-    staleTime: 5 * 60 * 1000, // 5 minutes
+    staleTime: 10 * 60 * 1000, // 10 minutes - longer cache for area-specific data
   });
 }
